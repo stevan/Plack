@@ -1,46 +1,55 @@
-package Plack::Middleware::BufferedStreaming;
-use strict;
+package Plack::Middleware;
+use v5.16;
 no warnings;
+use mop;
+
 use Carp;
 use Plack::Util;
-use Plack::Util::Accessor qw(force);
 use Scalar::Util qw(weaken);
-use parent qw(Plack::Middleware);
 
-sub call {
-    my ( $self, $env ) = @_;
+class BufferedStreaming extends Plack::Middleware is extending_non_mop {
+    has $force is rw;
 
-    my $caller_supports_streaming = $env->{'psgi.streaming'};
-    $env->{'psgi.streaming'} = Plack::Util::TRUE;
-
-    my $res = $self->app->($env);
-    return $res if $caller_supports_streaming && !$self->force;
-
-    if ( ref($res) eq 'CODE' ) {
-        my $ret;
-
-        $res->(sub {
-            my $write = shift;
-
-            if ( @$write == 2 ) {
-                my @body;
-
-                $ret = [ @$write, \@body ];
-
-                return Plack::Util::inline_object(
-                    write => sub { push @body, $_[0] },
-                    close => sub { },
-                );
-            } else {
-                $ret = $write;
-                return;
-            }
-        });
-
-        return $ret;
-    } else {
-        return $res;
+    submethod BUILD ($args) {
+        $force = $args->{'force'} 
+            if exists $args->{'force'};
     }
+
+    method call ($env) {
+
+        my $caller_supports_streaming = $env->{'psgi.streaming'};
+        $env->{'psgi.streaming'} = Plack::Util::TRUE;
+
+        my $res = $self->app->($env);
+        return $res if $caller_supports_streaming && !$force;
+
+        if ( ref($res) eq 'CODE' ) {
+            my $ret;
+
+            $res->(sub {
+                my $write = shift;
+
+                if ( @$write == 2 ) {
+                    my @body;
+
+                    $ret = [ @$write, \@body ];
+
+                    return Plack::Util::inline_object(
+                        write => sub { push @body, $_[0] },
+                        close => sub { },
+                    );
+                } else {
+                    $ret = $write;
+                    return;
+                }
+            });
+
+            return $ret;
+        } else {
+            return $res;
+        }
+    }
+
 }
 
 1;
