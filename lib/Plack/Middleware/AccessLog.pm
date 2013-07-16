@@ -15,7 +15,8 @@ class AccessLog extends Plack::Middleware is extending_non_mop {
     has $format          is rw;
     has $compiled_format is rw;
 
-    submethod BUILD ($args) {
+    submethod BUILD {
+        my $args = (@_ == 1 && ref $_[0] eq 'HASH') ? $_[0] : { @_ }; # XXX - remove me
         $logger = $args->{'logger'} if exists $args->{'logger'};
         $format = $args->{'format'} if exists $args->{'format'};
     }
