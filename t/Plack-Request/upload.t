@@ -11,8 +11,8 @@ my $app = sub {
     my $env = shift;
     my $req = Plack::Request->new($env);
 
-    isa_ok $req->uploads->{foo}, 'HASH';
-    is $req->uploads->{foo}->{filename}, 'foo2.txt';
+    isa_ok $req->uploads->{foo}, 'Plack::Request::Upload';
+    is $req->uploads->{foo}->filename, 'foo2.txt';
 
     my @files = $req->upload('foo');
     is scalar(@files), 2;
