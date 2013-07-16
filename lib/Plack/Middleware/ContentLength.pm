@@ -1,24 +1,26 @@
-package Plack::Middleware::ContentLength;
-use strict;
+package Plack::Middleware;
+use v5.16;
 use warnings;
-use parent qw( Plack::Middleware );
+use mop;
 
 use Plack::Util;
 
-sub call {
-    my $self = shift;
-    my $res  = $self->app->(@_);
+class ContentLength extends Plack::Middleware is extending_non_mop {
 
-    return $self->response_cb($res, sub {
-        my $res = shift;
-        my $h = Plack::Util::headers($res->[1]);
-        if (!Plack::Util::status_with_no_entity_body($res->[0]) &&
-            !$h->exists('Content-Length') &&
-            !$h->exists('Transfer-Encoding') &&
-            defined(my $content_length = Plack::Util::content_length($res->[2]))) {
-            $h->push('Content-Length' => $content_length);
-        }
-    });
+    method call ($env) {
+        my $res  = $self->app->($env);
+
+        return $self->response_cb($res, sub {
+            my $res = shift;
+            my $h = Plack::Util::headers($res->[1]);
+            if (!Plack::Util::status_with_no_entity_body($res->[0]) &&
+                !$h->exists('Content-Length') &&
+                !$h->exists('Transfer-Encoding') &&
+                defined(my $content_length = Plack::Util::content_length($res->[2]))) {
+                $h->push('Content-Length' => $content_length);
+            }
+        });
+    }
 }
 
 1;

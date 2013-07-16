@@ -1,33 +1,35 @@
-package Plack::Middleware::ContentMD5;
-
-use strict;
+package Plack::Middleware;
+use v5.16;
 use warnings;
-use parent qw( Plack::Middleware );
+use mop;
 
 use Plack::Util;
 use Digest::MD5 qw/md5_hex/;
 
-sub call {
-    my $self = shift;
-    my $res  = $self->app->(@_);
-    
-    $self->response_cb($res, sub {
-        my $res = shift;
+class ContentMD5 extends Plack::Middleware is extending_non_mop {
 
-        return unless defined $res->[2];
-        return if (Plack::Util::status_with_no_entity_body($res->[0]));
+    method call ($env) {
+        my $res  = $self->app->($env);
         
-        my $h = Plack::Util::headers($res->[1]);
-        return if ( $h->exists('Content-MD5') );
-        
-        my $body = $res->[2];
-        if (ref $body eq 'ARRAY') {
-            $h->set('Content-MD5', md5_hex(@$body));
-        }
-        # Do we need support $fh?
+        $self->response_cb($res, sub {
+            my $res = shift;
 
-        return;
-    });
+            return unless defined $res->[2];
+            return if (Plack::Util::status_with_no_entity_body($res->[0]));
+            
+            my $h = Plack::Util::headers($res->[1]);
+            return if ( $h->exists('Content-MD5') );
+            
+            my $body = $res->[2];
+            if (ref $body eq 'ARRAY') {
+                $h->set('Content-MD5', md5_hex(@$body));
+            }
+            # Do we need support $fh?
+
+            return;
+        });
+    }
+
 }
 
 1;

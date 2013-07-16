@@ -1,55 +1,54 @@
-package Plack::Middleware::ConditionalGET;
-use strict;
-use parent qw( Plack::Middleware );
+package Plack::Middleware;
+use v5.16;
+use warnings;
+no warnings 'uninitialized';
+use mop;
+
 use Plack::Util;
 
-sub call {
-    my $self = shift;
-    my $env  = shift;
+class ConditionalGET extends Plack::Middleware is extending_non_mop {
 
-    my $res = $self->app->($env);
-    return $res unless $env->{REQUEST_METHOD} =~ /^(GET|HEAD)$/;
+    method call ($env) {
 
-    $self->response_cb($res, sub {
-        my $res = shift;
+        my $res = $self->app->($env);
+        return $res unless $env->{REQUEST_METHOD} =~ /^(GET|HEAD)$/;
 
-        my $h = Plack::Util::headers($res->[1]);
-        if ( $self->etag_matches($h, $env) || $self->not_modified_since($h, $env) ) {
-            $res->[0] = 304;
-            $h->remove($_) for qw( Content-Type Content-Length Content-Disposition );
-            if ($res->[2]) {
-                $res->[2] = [];
-            } else {
-                return sub {
-                    return defined $_[0] ? '' : undef;
-                };
+        $self->response_cb($res, sub {
+            my $res = shift;
+
+            my $h = Plack::Util::headers($res->[1]);
+            if ( $self->etag_matches($h, $env) || $self->not_modified_since($h, $env) ) {
+                $res->[0] = 304;
+                $h->remove($_) for qw( Content-Type Content-Length Content-Disposition );
+                if ($res->[2]) {
+                    $res->[2] = [];
+                } else {
+                    return sub {
+                        return defined $_[0] ? '' : undef;
+                    };
+                }
             }
-        }
-    });
-}
+        });
+    }
 
-no warnings 'uninitialized';
+    # RFC 2616 14.25 says it's OK and expected to use 'eq' :)
+    # > Note: When handling an If-Modified-Since header field, some
+    # > servers will use an exact date comparison function, rather than a
+    # > less-than function, for deciding whether to send a 304 ...
 
-# RFC 2616 14.25 says it's OK and expected to use 'eq' :)
-# > Note: When handling an If-Modified-Since header field, some
-# > servers will use an exact date comparison function, rather than a
-# > less-than function, for deciding whether to send a 304 ...
+    method etag_matches ($h, $env) {
+        $h->exists('ETag') && $h->get('ETag') eq $self->_value($env->{HTTP_IF_NONE_MATCH});
+    }
 
-sub etag_matches {
-    my($self, $h, $env) = @_;
-    $h->exists('ETag') && $h->get('ETag') eq _value($env->{HTTP_IF_NONE_MATCH});
-}
+    method not_modified_since ($h, $env) {
+        $h->exists('Last-Modified') && $h->get('Last-Modified') eq $self->_value($env->{HTTP_IF_MODIFIED_SINCE});
+    }
 
-sub not_modified_since {
-    my($self, $h, $env) = @_;
-    $h->exists('Last-Modified') && $h->get('Last-Modified') eq _value($env->{HTTP_IF_MODIFIED_SINCE});
-}
-
-sub _value {
-    my $str = shift;
-    # IE sends wrong formatted value(i.e. "Thu, 03 Dec 2009 01:46:32 GMT; length=17936")
-    $str =~ s/;.*$//;
-    return $str;
+    submethod _value ($str) {
+        # IE sends wrong formatted value(i.e. "Thu, 03 Dec 2009 01:46:32 GMT; length=17936")
+        $str =~ s/;.*$//;
+        return $str;
+    }
 }
 
 1;

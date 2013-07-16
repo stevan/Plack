@@ -1,19 +1,28 @@
-package Plack::Middleware::Conditional;
-use strict;
-use parent qw(Plack::Middleware);
+package Plack::Middleware;
+use v5.16;
+use warnings;
+use mop;
 
-use Plack::Util::Accessor qw( condition middleware builder );
+class Conditional extends Plack::Middleware is extending_non_mop {
+    has $condition  is rw; 
+    has $middleware is rw;
+    has $builder    is rw;
 
-sub prepare_app {
-    my $self = shift;
-    $self->middleware( $self->builder->($self->app) );
-}
+    submethod BUILD {
+        my $args = (@_ == 1 && ref $_[0] eq 'HASH') ? $_[0] : { @_ }; # XXX - remove me
+        $condition  = $args->{'condition'}  if exists $args->{'condition'}; 
+        $middleware = $args->{'middleware'} if exists $args->{'middleware'};
+        $builder    = $args->{'builder'}    if exists $args->{'builder'};
+    }
 
-sub call {
-    my($self, $env) = @_;
+    method prepare_app {
+        $self->middleware( $builder->($self->app) );
+    }
 
-    my $app = $self->condition->($env) ? $self->middleware : $self->app;
-    return $app->($env);
+    method call ($env) {
+        my $app = $self->condition->($env) ? $middleware : $self->app;
+        return $app->($env);
+    }
 }
 
 1;
