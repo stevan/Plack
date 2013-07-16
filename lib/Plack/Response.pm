@@ -1,4 +1,4 @@
-
+package Plack;
 use v5.16;
 use warnings;
 use mop;
@@ -8,7 +8,7 @@ use Scalar::Util  ();
 use HTTP::Headers ();
 use URI::Escape   ();
 
-class Plack::Response {
+class Response {
     has $body    is rw;
     has $status  is rw;
     has $cookies is rw = {};    

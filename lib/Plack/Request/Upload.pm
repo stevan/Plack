@@ -1,11 +1,11 @@
-
+package Plack::Request;
 use v5.16;
 use warnings;
 use mop;
 
 use Carp ();
 
-class Plack::Request::Upload {
+class Upload {
     has $headers  is ro;
     has $tempname is ro;
     has $size     is ro;
