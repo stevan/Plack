@@ -1,175 +1,146 @@
-package Plack::Response;
-use strict;
+package Plack;
+use v5.16;
 use warnings;
-our $VERSION = '1.0028';
-$VERSION = eval $VERSION;
+use mop;
 
-use Plack::Util::Accessor qw(body status);
-use Carp ();
-use Scalar::Util ();
-use HTTP::Headers;
-use URI::Escape ();
+use Carp          ();
+use Scalar::Util  ();
+use HTTP::Headers ();
+use URI::Escape   ();
 
-sub code    { shift->status(@_) }
-sub content { shift->body(@_)   }
+class Response {
+    has $body    is rw;
+    has $status  is rw;
+    has $cookies is rw = {};    
+    has $headers;
 
-sub new {
-    my($class, $rc, $headers, $content) = @_;
+    method code    { $self->status(@_) }
+    method content { $self->body(@_)   }
 
-    my $self = bless {}, $class;
-    $self->status($rc)       if defined $rc;
-    $self->headers($headers) if defined $headers;
-    $self->body($content)    if defined $content;
+    method new ($rc, $_headers, $content) {
+        my $this = $class->next::method(
+            status  => $rc,
+            body    => $content
+        );
 
-    $self;
-}
+        $this->headers($_headers);
+        $this;
+    }
 
-sub headers {
-    my $self = shift;
-
-    if (@_) {
-        my $headers = shift;
-        if (ref $headers eq 'ARRAY') {
-            Carp::carp("Odd number of headers") if @$headers % 2 != 0;
-            $headers = HTTP::Headers->new(@$headers);
-        } elsif (ref $headers eq 'HASH') {
-            $headers = HTTP::Headers->new(%$headers);
+    method headers ($_headers) {
+        if (defined $_headers) {
+            if (ref $_headers eq 'ARRAY') {
+                Carp::carp("Odd number of headers") if @$_headers % 2 != 0;
+                $headers = HTTP::Headers->new(@$_headers);
+            } elsif (ref $_headers eq 'HASH') {
+                $headers = HTTP::Headers->new(%$_headers);
+            }
+        } else {
+            $headers //= HTTP::Headers->new();
         }
-        return $self->{headers} = $headers;
-    } else {
-        return $self->{headers} ||= HTTP::Headers->new();
-    }
-}
-
-sub cookies {
-    my $self = shift;
-    if (@_) {
-        $self->{cookies} = shift;
-    } else {
-        return $self->{cookies} ||= +{ };
-    }
-}
-
-sub header { shift->headers->header(@_) } # shortcut
-
-sub content_length {
-    shift->headers->content_length(@_);
-}
-
-sub content_type {
-    shift->headers->content_type(@_);
-}
-
-sub content_encoding {
-    shift->headers->content_encoding(@_);
-}
-
-sub location {
-    my $self = shift;
-    return $self->headers->header('Location' => @_);
-}
-
-sub redirect {
-    my $self = shift;
-
-    if (@_) {
-        my $url = shift;
-        my $status = shift || 302;
-        $self->location($url);
-        $self->status($status);
+        return $headers;
     }
 
-    return $self->location;
-}
+    method header { $self->headers->header(@_) } # shortcut
 
-sub finalize {
-    my $self = shift;
-    Carp::croak "missing status" unless $self->status();
+    method content_length   { $self->headers->content_length(@_)   }
+    method content_type     { $self->headers->content_type(@_)     }
+    method content_encoding { $self->headers->content_encoding(@_) }
 
-    my $headers = $self->headers->clone;
-    $self->_finalize_cookies($headers);
+    method location { $self->headers->header('Location' => @_) }
 
-    return [
-        $self->status,
-        +[
-            map {
-                my $k = $_;
+    method redirect ($url, $_status) {
+
+        if ($url) {
+            $self->location($url);
+            $status = $_status // 302;
+        }
+
+        return $self->location;
+    }
+
+    method finalize {
+        Carp::croak "missing status" unless $self->status();
+
+        my $_headers = $self->headers->clone;
+        $self->_finalize_cookies($_headers);
+
+        return [
+            $status,
+            +[
                 map {
-                    my $v = $_;
-                    $v =~ s/\015\012[\040|\011]+/chr(32)/ge; # replace LWS with a single SP
-                    $v =~ s/\015|\012//g; # remove CR and LF since the char is invalid here
+                    my $k = $_;
+                    map {
+                        my $v = $_;
+                        $v =~ s/\015\012[\040|\011]+/chr(32)/ge; # replace LWS with a single SP
+                        $v =~ s/\015|\012//g; # remove CR and LF since the char is invalid here
 
-                    ( $k => $v )
-                } $headers->header($_);
+                        ( $k => $v )
+                    } $_headers->header($_);
 
-            } $headers->header_field_names
-        ],
-        $self->_body,
-    ];
-}
-
-sub to_app {
-    my $self = shift;
-    return sub { $self->finalize };
-}
-
-
-sub _body {
-    my $self = shift;
-    my $body = $self->body;
-       $body = [] unless defined $body;
-    if (!ref $body or Scalar::Util::blessed($body) && overload::Method($body, q("")) && !$body->can('getline')) {
-        return [ $body ];
-    } else {
-        return $body;
-    }
-}
-
-sub _finalize_cookies {
-    my($self, $headers) = @_;
-
-    while (my($name, $val) = each %{$self->cookies}) {
-        my $cookie = $self->_bake_cookie($name, $val);
-        $headers->push_header('Set-Cookie' => $cookie);
-    }
-}
-
-sub _bake_cookie {
-    my($self, $name, $val) = @_;
-
-    return '' unless defined $val;
-    $val = { value => $val } unless ref $val eq 'HASH';
-
-    my @cookie = ( URI::Escape::uri_escape($name) . "=" . URI::Escape::uri_escape($val->{value}) );
-    push @cookie, "domain=" . $val->{domain}   if $val->{domain};
-    push @cookie, "path=" . $val->{path}       if $val->{path};
-    push @cookie, "expires=" . $self->_date($val->{expires}) if $val->{expires};
-    push @cookie, "max-age=" . $val->{"max-age"} if $val->{"max-age"};
-    push @cookie, "secure"                     if $val->{secure};
-    push @cookie, "HttpOnly"                   if $val->{httponly};
-
-    return join "; ", @cookie;
-}
-
-my @MON  = qw( Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec );
-my @WDAY = qw( Sun Mon Tue Wed Thu Fri Sat );
-
-sub _date {
-    my($self, $expires) = @_;
-
-    if ($expires =~ /^\d+$/) {
-        # all numbers -> epoch date
-        # (cookies use '-' as date separator, HTTP uses ' ')
-        my($sec, $min, $hour, $mday, $mon, $year, $wday) = gmtime($expires);
-        $year += 1900;
-
-        return sprintf("%s, %02d-%s-%04d %02d:%02d:%02d GMT",
-                       $WDAY[$wday], $mday, $MON[$mon], $year, $hour, $min, $sec);
-
+                } $_headers->header_field_names
+            ],
+            $self->_body,
+        ];
     }
 
-    return $expires;
+    method to_app {
+        return sub { $self->finalize };
+    }
+
+
+    method _body {
+        $body = [] unless defined $body;
+        if (!ref $body or Scalar::Util::blessed($body) && overload::Method($body, q("")) && !$body->can('getline')) {
+            return [ $body ];
+        } else {
+            return $body;
+        }
+    }
+
+    method _finalize_cookies ($_headers) {
+        while (my($name, $val) = each %{$self->cookies}) {
+            my $cookie = $self->_bake_cookie($name, $val);
+            $_headers->push_header('Set-Cookie' => $cookie);
+        }
+    }
+
+    method _bake_cookie ($name, $val) {
+
+        return '' unless defined $val;
+        $val = { value => $val } unless ref $val eq 'HASH';
+
+        my @cookie = ( URI::Escape::uri_escape($name) . "=" . URI::Escape::uri_escape($val->{value}) );
+        push @cookie, "domain=" . $val->{domain}   if $val->{domain};
+        push @cookie, "path=" . $val->{path}       if $val->{path};
+        push @cookie, "expires=" . $self->_date($val->{expires}) if $val->{expires};
+        push @cookie, "max-age=" . $val->{"max-age"} if $val->{"max-age"};
+        push @cookie, "secure"                     if $val->{secure};
+        push @cookie, "HttpOnly"                   if $val->{httponly};
+
+        return join "; ", @cookie;
+    }
+
+    method _date ($expires) {
+        state $MON  = [qw( Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec )];
+        state $WDAY = [qw( Sun Mon Tue Wed Thu Fri Sat )];
+
+        if ($expires =~ /^\d+$/) {
+            # all numbers -> epoch date
+            # (cookies use '-' as date separator, HTTP uses ' ')
+            my($sec, $min, $hour, $mday, $mon, $year, $wday) = gmtime($expires);
+            $year += 1900;
+
+            return sprintf("%s, %02d-%s-%04d %02d:%02d:%02d GMT",
+                           $WDAY->[$wday], $mday, $MON->[$mon], $year, $hour, $min, $sec);
+
+        }
+
+        return $expires;
+    }
+
 }
+
 
 1;
 __END__
