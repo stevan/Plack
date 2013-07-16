@@ -1,60 +1,61 @@
-package Plack::Middleware::AccessLog::Timed;
-use strict;
+package Plack::Middleware::AccessLog;
+use v5.16;
 use warnings;
-use parent qw( Plack::Middleware::AccessLog );
+use mop;
 
 use Time::HiRes;
 use Plack::Util;
 
-sub call {
-    my $self = shift;
-    my($env) = @_;
+class Timed extends Plack::Middleware::AccessLog {
 
-    my $time = Time::HiRes::gettimeofday;
-    my $length = 0;
-    my $logger = $self->logger || sub { $env->{'psgi.errors'}->print(@_) };
+    method call ($env) {
 
-    my $res = $self->app->($env);
+        my $time = Time::HiRes::gettimeofday;
+        my $length = 0;
+        my $logger = $self->logger || sub { $env->{'psgi.errors'}->print(@_) };
 
-    return $self->response_cb($res, sub {
-        my $res = shift;
-        my($status, $header, $body) = @$res;
+        my $res = $self->app->($env);
 
-        if (!defined $body) {
-            my $length;
+        return $self->response_cb($res, sub {
+            my $res = shift;
+            my($status, $header, $body) = @$res;
 
-            return sub {
-                my $line = shift;
-                
-                $length += length $line if defined $line;
+            if (!defined $body) {
+                my $length;
 
-                unless( defined $line ) {
+                return sub {
+                    my $line = shift;
+                    
+                    $length += length $line if defined $line;
+
+                    unless( defined $line ) {
+                        my $now = Time::HiRes::gettimeofday;
+                        $logger->( $self->log_line($status, $header, $env, { time => $now - $time, content_length => $length }) );
+                    }
+
+                    return $line;
+                };
+            }
+
+            my $getline = ref $body eq 'ARRAY' ? sub { shift @$body } : sub { $body->getline };
+
+            my $timer_body = Plack::Util::inline_object(
+                getline => sub {
+                    my $line = $getline->();
+                    $length += length $line if defined $line;
+                    return $line;
+                },
+                close => sub {
+                    $body->close if ref $body ne 'ARRAY';
+
                     my $now = Time::HiRes::gettimeofday;
                     $logger->( $self->log_line($status, $header, $env, { time => $now - $time, content_length => $length }) );
-                }
+                },
+            );
 
-                return $line;
-            };
-        }
-
-        my $getline = ref $body eq 'ARRAY' ? sub { shift @$body } : sub { $body->getline };
-
-        my $timer_body = Plack::Util::inline_object(
-            getline => sub {
-                my $line = $getline->();
-                $length += length $line if defined $line;
-                return $line;
-            },
-            close => sub {
-                $body->close if ref $body ne 'ARRAY';
-
-                my $now = Time::HiRes::gettimeofday;
-                $logger->( $self->log_line($status, $header, $env, { time => $now - $time, content_length => $length }) );
-            },
-        );
-
-        @$res = ($status, $header, $timer_body);
-    });
+            @$res = ($status, $header, $timer_body);
+        });
+    }
 }
 
 1;

@@ -1,62 +1,77 @@
-package Plack::Middleware::AccessLog;
-use strict;
+package Plack::Middleware;
+use v5.16;
 use warnings;
-use parent qw( Plack::Middleware );
-use Plack::Util::Accessor qw( logger format compiled_format);
+use mop;
+
 use Apache::LogFormat::Compiler;
 
 my %formats = (
-    common => '%h %l %u %t "%r" %>s %b',
+    common   => '%h %l %u %t "%r" %>s %b',
     combined => '%h %l %u %t "%r" %>s %b "%{Referer}i" "%{User-agent}i"',
 );
 
-sub prepare_app {
-    my $self = shift;
-    my $fmt = $self->format || "combined";
-    $fmt = $formats{$fmt} if exists $formats{$fmt};
-    $self->compiled_format(Apache::LogFormat::Compiler->new($fmt));
-}
+class AccessLog extends Plack::Middleware is extending_non_mop {
+    has $logger          is rw;
+    has $format          is rw;
+    has $compiled_format is rw;
 
-sub call {
-    my $self = shift;
-    my($env) = @_;
-
-    my $res = $self->app->($env);
-
-    if ( ref($res) && ref($res) eq 'ARRAY' ) {
-        my $content_length = Plack::Util::content_length($res->[2]);
-        my $log_line = $self->log_line($res->[0], $res->[1], $env, { content_length => $content_length });
-        if ( my $logger = $self->logger ) {
-            $logger->($log_line);
-        }
-        else {
-            $env->{'psgi.errors'}->print($log_line);
-        }  
-        return $res;
+    submethod BUILD ($args) {
+        $logger = $args->{'logger'} if exists $args->{'logger'};
+        $format = $args->{'format'} if exists $args->{'format'};
     }
 
-    return $self->response_cb($res, sub {
-        my $res = shift;
-        my $content_length = Plack::Util::content_length($res->[2]);
-        my $log_line = $self->log_line($res->[0], $res->[1], $env, { content_length => $content_length });
-        if ( my $logger = $self->logger ) {
-            $logger->($log_line);
+    method prepare_app {
+        my $fmt = $format || "combined";
+        $fmt = $formats{$fmt} if exists $formats{$fmt};
+        $compiled_format = Apache::LogFormat::Compiler->new($fmt);
+    }
+
+    method call ($env) {
+
+        my $res = $self->app->($env);
+
+        if ( ref($res) && ref($res) eq 'ARRAY' ) {
+            my $content_length = Plack::Util::content_length($res->[2]);
+            use Data::Dumper;
+            my $log_line = $self->log_line($res->[0], $res->[1], $env, { content_length => $content_length });
+            if ( $logger ) {
+                $logger->($log_line);
+            }
+            else {
+                $env->{'psgi.errors'}->print($log_line);
+            }  
+            return $res;
         }
-        else {
-            $env->{'psgi.errors'}->print($log_line);
-        }  
-    });
-}
 
-sub log_line {
-    my($self, $status, $headers, $env, $opts) = @_;
+        return $self->response_cb($res, sub {
+            my $res = shift;
+            my $content_length = Plack::Util::content_length($res->[2]);           
+            my $log_line = $self->log_line($res->[0], $res->[1], $env, { content_length => $content_length });
+            if ( $logger ) {
+                $logger->($log_line);
+            }
+            else {
+                $env->{'psgi.errors'}->print($log_line);
+            }  
+        });
+    }
 
-    $self->compiled_format->log_line(
-        $env,
-        [$status,$headers],
-        $opts->{content_length},
-        $opts->{time}
-    );
+    method log_line ($status, $headers, $env, $opts) {
+        # NOTE:
+        # not sure why, but this cannot be 
+        # called as:
+        #    $compiled_format->log_line(...)
+        # it does some really weird stuff
+        # if you do it.
+        # - SL
+        $self->compiled_format->log_line(
+            $env,
+            [$status,$headers],
+            $opts->{content_length},
+            $opts->{time}
+        );
+    }
+
 }
 
 1;
