@@ -1,29 +1,29 @@
-package Plack::Middleware::IIS6ScriptNameFix;
+package Plack::Middleware;
+use v5.16;
+use warnings;
+use mop;
 
-use strict;
-use parent 'Plack::Middleware';
+class IIS6ScriptNameFix extends Plack::Middleware is extending_non_mop {
+    method call ($env) {
+        if ($env->{SERVER_SOFTWARE} && $env->{SERVER_SOFTWARE} =~ /IIS\/[6-9]\.[0-9]/) {
+            my @script_name = split(m!/!, $env->{PATH_INFO});
+            my @path_translated = split(m!/|\\\\?!, $env->{PATH_TRANSLATED});
+            my @path_info;
 
-sub call {
-    my($self, $env) = @_;
+            while ($script_name[$#script_name] eq $path_translated[$#path_translated]) {
+                pop(@path_translated);
+                unshift(@path_info, pop(@script_name));
+            }
+    
+            unshift(@path_info, '', '');
 
-    if ($env->{SERVER_SOFTWARE} && $env->{SERVER_SOFTWARE} =~ /IIS\/[6-9]\.[0-9]/) {
-        my @script_name = split(m!/!, $env->{PATH_INFO});
-        my @path_translated = split(m!/|\\\\?!, $env->{PATH_TRANSLATED});
-        my @path_info;
-
-        while ($script_name[$#script_name] eq $path_translated[$#path_translated]) {
-            pop(@path_translated);
-            unshift(@path_info, pop(@script_name));
+            $env->{PATH_INFO} = join('/', @path_info);
+            $env->{SCRIPT_NAME} = join('/', @script_name);
         }
 
-        unshift(@path_info, '', '');
-
-        $env->{PATH_INFO} = join('/', @path_info);
-        $env->{SCRIPT_NAME} = join('/', @script_name);
+        return $self->app->($env);
     }
-
-    return $self->app->($env);
-}
+};
 
 1;
 

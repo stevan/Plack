@@ -1,11 +1,12 @@
-package Plack::Middleware::IIS7KeepAliveFix;
+package Plack::Middleware;
+use v5.16;
+use warnings;
+use mop;
 
-use strict;
-use parent 'Plack::Middleware';
 use Plack::Util;
 
-sub call {
-    my($self, $env) = @_;
+class IIS7KeepAliveFix extends Plack::Middleware is extending_non_mop {
+    method call ($env) {
         # Fixes buffer being cut off on redirect when keep-alive is active
         my $res  = $self->app->($env);
 
@@ -19,7 +20,7 @@ sub call {
 
             return;
         });
-
+    }
 }
 
 1;
