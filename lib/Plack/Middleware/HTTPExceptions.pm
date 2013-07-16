@@ -1,85 +1,92 @@
-package Plack::Middleware::HTTPExceptions;
-use strict;
-use parent qw(Plack::Middleware);
-use Plack::Util::Accessor qw(rethrow);
+package Plack::Middleware;
+use v5.16;
+use warnings;
+use mop;
 
 use Carp ();
 use Try::Tiny;
 use Scalar::Util 'blessed';
 use HTTP::Status ();
 
-sub prepare_app {
-    my $self = shift;
-    $self->rethrow(1) if ($ENV{PLACK_ENV} || '') eq 'development';
-}
+class HTTPExceptions extends Plack::Middleware is extending_non_mop {
+    has $rethrow is rw;
 
-sub call {
-    my($self, $env) = @_;
+    submethod BUILD {
+        my $args = (@_ == 1 && ref $_[0] eq 'HASH') ? $_[0] : { @_ }; # XXX - remove me
+        $rethrow = $args->{'rethrow'} if exists $args->{'rethrow'};
+    }
 
-    my $res = try {
-        $self->app->($env);
-    } catch {
-        $self->transform_error($_, $env);
-    };
+    method prepare_app {
+        $rethrow = 1 if ($ENV{PLACK_ENV} || '') eq 'development';
+    }
 
-    return $res if ref $res eq 'ARRAY';
+    method call ($env) {
 
-    return sub {
-        my $respond = shift;
-
-        my $writer;
-        try {
-            $res->(sub { return $writer = $respond->(@_) });
+        my $res = try {
+            $self->app->($env);
         } catch {
-            if ($writer) {
-                Carp::cluck $_;
-                $writer->close;
-            } else {
-                my $res = $self->transform_error($_, $env);
-                $respond->($res);
-            }
+            $self->transform_error($_, $env);
         };
-    };
-}
 
-sub transform_error {
-    my($self, $e, $env) = @_;
+        return $res if ref $res eq 'ARRAY';
 
-    my($code, $message);
-    if (blessed $e && $e->can('as_psgi')) {
-        return $e->as_psgi;
+        return sub {
+            my $respond = shift;
+
+            my $writer;
+            try {
+                $res->(sub { return $writer = $respond->(@_) });
+            } catch {
+                if ($writer) {
+                    Carp::cluck $_;
+                    $writer->close;
+                } else {
+                    my $res = $self->transform_error($_, $env);
+                    $respond->($res);
+                }
+            };
+        };
     }
-    if (blessed $e && $e->can('code')) {
-        $code = $e->code;
-        $message =
-            $e->can('as_string')       ? $e->as_string :
-            overload::Method($e, '""') ? "$e"          : undef;
-    } else {
-        if ($self->rethrow) {
-            die $e;
+
+    method transform_error ($e, $env) {
+
+        my($code, $message);
+        if (blessed $e && $e->can('as_psgi')) {
+            return $e->as_psgi;
         }
-        else {
-            $code = 500;
-            $env->{'psgi.errors'}->print($e);
+        if (blessed $e && $e->can('code')) {
+            $code = $e->code;
+            $message =
+                $e->can('as_string')       ? $e->as_string :
+                overload::Method($e, '""') ? "$e"          : undef;
+        } else {
+            if ($self->rethrow) {
+                die $e;
+            }
+            else {
+                $code = 500;
+                $env->{'psgi.errors'}->print($e);
+            }
         }
+
+        if ($code !~ /^[3-5]\d\d$/) {
+            die $e; # rethrow
+        }
+
+        $message ||= HTTP::Status::status_message($code);
+
+        my @headers = (
+             'Content-Type'   => 'text/plain',
+             'Content-Length' => length($message),
+        );
+
+        if ($code =~ /^3/ && (my $loc = eval { $e->location })) {
+            push(@headers, Location => $loc);
+        }
+
+        return [ $code, \@headers, [ $message ] ];
     }
 
-    if ($code !~ /^[3-5]\d\d$/) {
-        die $e; # rethrow
-    }
-
-    $message ||= HTTP::Status::status_message($code);
-
-    my @headers = (
-         'Content-Type'   => 'text/plain',
-         'Content-Length' => length($message),
-    );
-
-    if ($code =~ /^3/ && (my $loc = eval { $e->location })) {
-        push(@headers, Location => $loc);
-    }
-
-    return [ $code, \@headers, [ $message ] ];
 }
 
 1;

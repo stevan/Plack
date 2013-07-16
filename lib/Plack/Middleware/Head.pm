@@ -1,24 +1,26 @@
-package Plack::Middleware::Head;
-use strict;
+package Plack::Middleware;
+use v5.16;
 use warnings;
-use parent qw(Plack::Middleware);
+use mop;
 
-sub call {
-    my($self, $env) = @_;
+class Head extends Plack::Middleware is extending_non_mop {
 
-    return $self->app->($env)
-        unless $env->{REQUEST_METHOD} eq 'HEAD';
+    method call ($env) {
 
-    $self->response_cb($self->app->($env), sub {
-        my $res = shift;
-        if ($res->[2]) {
-            $res->[2] = [];
-        } else {
-            return sub {
-                return defined $_[0] ? '': undef;
-            };
-        }
-    });
+        return $self->app->($env)
+            unless $env->{REQUEST_METHOD} eq 'HEAD';
+
+        $self->response_cb($self->app->($env), sub {
+            my $res = shift;
+            if ($res->[2]) {
+                $res->[2] = [];
+            } else {
+                return sub {
+                    return defined $_[0] ? '': undef;
+                };
+            }
+        });
+    }
 }
 
 1;

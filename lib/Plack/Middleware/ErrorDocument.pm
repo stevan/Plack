@@ -1,83 +1,85 @@
-package Plack::Middleware::ErrorDocument;
-use strict;
+package Plack::Middleware;
+use v5.16;
 use warnings;
-use parent qw(Plack::Middleware);
+use mop;
+
 use Plack::MIME;
 use Plack::Util;
 use Plack::Util::Accessor qw( subrequest );
 
 use HTTP::Status qw(is_error);
 
-sub call {
-    my $self = shift;
-    my $env  = shift;
+class ErrorDocument extends Plack::Middleware is extending_non_mop {
 
-    my $r = $self->app->($env);
+    method call ($env) {
 
-    $self->response_cb($r, sub {
-        my $r = shift;
-        unless (is_error($r->[0]) && exists $self->{$r->[0]}) {
-            return;
-        }
+        my $r = $self->app->($env);
 
-        my $path = $self->{$r->[0]};
-        if ($self->subrequest) {
-            for my $key (keys %$env) {
-                unless ($key =~ /^psgi/) {
-                    $env->{'psgix.errordocument.' . $key} = $env->{$key};
-                }
+        $self->response_cb($r, sub {
+            my $r = shift;
+            unless (is_error($r->[0]) && exists $self->{$r->[0]}) {
+                return;
             }
 
-            # TODO: What if SCRIPT_NAME is not empty?
-            $env->{REQUEST_METHOD} = 'GET';
-            $env->{REQUEST_URI}    = $path;
-            $env->{PATH_INFO}      = $path;
-            $env->{QUERY_STRING}   = '';
-            delete $env->{CONTENT_LENGTH};
-
-            my $sub_r = $self->app->($env);
-            if ($sub_r->[0] == 200) {
-                $r->[1] = $sub_r->[1];
-                if (@$r == 3) {
-                    $r->[2] = $sub_r->[2];
+            my $path = $self->{$r->[0]};
+            if ($self->subrequest) {
+                for my $key (keys %$env) {
+                    unless ($key =~ /^psgi/) {
+                        $env->{'psgix.errordocument.' . $key} = $env->{$key};
+                    }
                 }
-                else {
-                    my $full_sub_response = '';
-                    Plack::Util::foreach($sub_r->[2], sub {
-                        $full_sub_response .= $_[0];
-                    });
 
-                    my $returned;
-                    return sub {
-                        if ($returned) {
-                            return defined($_[0]) ? '' : undef;
+                # TODO: What if SCRIPT_NAME is not empty?
+                $env->{REQUEST_METHOD} = 'GET';
+                $env->{REQUEST_URI}    = $path;
+                $env->{PATH_INFO}      = $path;
+                $env->{QUERY_STRING}   = '';
+                delete $env->{CONTENT_LENGTH};
+
+                my $sub_r = $self->app->($env);
+                if ($sub_r->[0] == 200) {
+                    $r->[1] = $sub_r->[1];
+                    if (@$r == 3) {
+                        $r->[2] = $sub_r->[2];
+                    }
+                    else {
+                        my $full_sub_response = '';
+                        Plack::Util::foreach($sub_r->[2], sub {
+                            $full_sub_response .= $_[0];
+                        });
+
+                        my $returned;
+                        return sub {
+                            if ($returned) {
+                                return defined($_[0]) ? '' : undef;
+                            }
+                            $returned = 1;
+                            return $full_sub_response;
                         }
-                        $returned = 1;
-                        return $full_sub_response;
                     }
                 }
-            }
-            # TODO: allow 302 here?
-        } else {
-            my $h = Plack::Util::headers($r->[1]);
-            $h->remove('Content-Length');
-            $h->set('Content-Type', Plack::MIME->mime_type($path));
-
-            open my $fh, "<", $path or die "$path: $!";
-            if ($r->[2]) {
-                $r->[2] = $fh;
+                # TODO: allow 302 here?
             } else {
-                my $done;
-                return sub {
-                    unless ($done) {
-                        return join '', <$fh>;
-                    }
-                    $done = 1;
-                    return defined $_[0] ? '' : undef;
+                my $h = Plack::Util::headers($r->[1]);
+                $h->remove('Content-Length');
+                $h->set('Content-Type', Plack::MIME->mime_type($path));
+
+                open my $fh, "<", $path or die "$path: $!";
+                if ($r->[2]) {
+                    $r->[2] = $fh;
+                } else {
+                    my $done;
+                    return sub {
+                        unless ($done) {
+                            return join '', <$fh>;
+                        }
+                        $done = 1;
+                        return defined $_[0] ? '' : undef;
+                    };
                 };
-            };
-        }
-    });
+            }
+        });
+    }
 }
 
 1;
