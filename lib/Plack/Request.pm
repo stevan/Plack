@@ -1,4 +1,4 @@
-package Plack;
+
 use v5.16;
 use warnings;
 use mop;
@@ -14,7 +14,7 @@ use Stream::Buffered       ();
 use URI         ();
 use URI::Escape ();
 
-class Request {
+class Plack::Request {
     has $env is ro;
 
     has $headers;
