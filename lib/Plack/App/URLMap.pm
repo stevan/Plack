@@ -11,7 +11,9 @@ class URLMap extends Plack::Component is overload('inherited') {
     has $_mapping        = [];
     has $_sorted_mapping = [];
 
-    method mount { shift->map(@_) }
+    method mount ($location, $app) { 
+        $self->map( $location, $app ); 
+    }
 
     method map ($location, $app) {
 
