@@ -1,90 +1,102 @@
-package Plack::App::WrapCGI;
-use strict;
+package Plack::App;
+use v5.16;
 use warnings;
-use parent qw(Plack::Component);
-use Plack::Util::Accessor qw(script execute _app);
+use mop;
+
 use File::Spec;
 use CGI::Emulate::PSGI;
 use CGI::Compile;
 use Carp;
 use POSIX ":sys_wait_h";
 
-sub prepare_app {
-    my $self = shift;
-    my $script = $self->script
-        or croak "'script' is not set";
+class WrapCGI extends Plack::Component is overload('inherited') {
+    has $script  is rw;
+    has $execute is rw;
+    has $_app    is rw;
 
-    $script = File::Spec->rel2abs($script);
+    method prepare_app {
+        $script or croak "'script' is not set";
+        $script = File::Spec->rel2abs($script);
 
-    if ($self->execute) {
-        my $app = sub {
-            my $env = shift;
+        if ($execute) {
+            my $app = sub {
+                my $env = shift;
 
-            pipe( my $stdoutr, my $stdoutw );
-            pipe( my $stdinr,  my $stdinw );
-
-
-            my $pid = fork();
-            Carp::croak("fork failed: $!") unless defined $pid;
+                pipe( my $stdoutr, my $stdoutw );
+                pipe( my $stdinr,  my $stdinw );
 
 
-            if ($pid == 0) { # child
-                local $SIG{__DIE__} = sub {
-                    print STDERR @_;
-                    exit(1);
-                };
+                my $pid = fork();
+                Carp::croak("fork failed: $!") unless defined $pid;
 
-                close $stdoutr;
-                close $stdinw;
 
-                local %ENV = (%ENV, CGI::Emulate::PSGI->emulate_environment($env));
+                if ($pid == 0) { # child
+                    local $SIG{__DIE__} = sub {
+                        print STDERR @_;
+                        exit(1);
+                    };
 
-                open( STDOUT, ">&=" . fileno($stdoutw) )
-                  or Carp::croak "Cannot dup STDOUT: $!";
-                open( STDIN, "<&=" . fileno($stdinr) )
-                  or Carp::croak "Cannot dup STDIN: $!";
+                    close $stdoutr;
+                    close $stdinw;
 
-                chdir(File::Basename::dirname($script));
-                exec($script) or Carp::croak("cannot exec: $!");
+                    local %ENV = (%ENV, CGI::Emulate::PSGI->emulate_environment($env));
 
-                exit(2);
-            }
+                    open( STDOUT, ">&=" . fileno($stdoutw) )
+                      or Carp::croak "Cannot dup STDOUT: $!";
+                    open( STDIN, "<&=" . fileno($stdinr) )
+                      or Carp::croak "Cannot dup STDIN: $!";
 
-            close $stdoutw;
-            close $stdinr;
+                    chdir(File::Basename::dirname($script));
+                    exec($script) or Carp::croak("cannot exec: $!");
 
-            syswrite($stdinw, do {
-                local $/;
-                my $fh = $env->{'psgi.input'};
-                <$fh>;
-            });
-            # close STDIN so child will stop waiting
-            close $stdinw;
+                    exit(2);
+                }
 
-            my $res = '';
-            while (waitpid($pid, WNOHANG) <= 0) {
+                close $stdoutw;
+                close $stdinr;
+
+                {
+                    # FIXME:
+                    # This is throwing a warning about 
+                    # an uninitialized value in $fh
+                    # then on reading from an unopened
+                    # filehandle, but I can't figure 
+                    # out why. So punt for now.
+                    # - SL
+                    no warnings;
+                    syswrite($stdinw, do {
+                        local $/;
+                        my $fh = $env->{'psgi.input'};
+                        <$fh>;
+                    });
+                    # close STDIN so child will stop waiting
+                    close $stdinw;
+                }
+
+                my $res = '';
+                while (waitpid($pid, WNOHANG) <= 0) {
+                    $res .= do { local $/; <$stdoutr> };
+                }
                 $res .= do { local $/; <$stdoutr> };
-            }
-            $res .= do { local $/; <$stdoutr> };
 
-            if (POSIX::WIFEXITED($?)) {
-                return CGI::Parse::PSGI::parse_cgi_output(\$res);
-            } else {
-                Carp::croak("Error at run_on_shell CGI: $!");
-            }
-        };
-        $self->_app($app);
-    } else {
-        my $sub = CGI::Compile->compile($script);
-        my $app = CGI::Emulate::PSGI->handler($sub);
+                if (POSIX::WIFEXITED($?)) {
+                    return CGI::Parse::PSGI::parse_cgi_output(\$res);
+                } else {
+                    Carp::croak("Error at run_on_shell CGI: $!");
+                }
+            };
+            $_app = $app;
+        } else {
+            my $sub = CGI::Compile->compile($script);
+            my $app = CGI::Emulate::PSGI->handler($sub);
 
-        $self->_app($app);
+            $_app = $app;
+        }
     }
-}
 
-sub call {
-    my($self, $env) = @_;
-    $self->_app->($env);
+    method call ($env) {
+        $_app->($env);
+    }
 }
 
 1;

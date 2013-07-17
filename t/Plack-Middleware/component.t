@@ -1,17 +1,19 @@
 use strict;
+use mop;
+
 use Test::Requires qw(IO::Handle::Util);
 
-package MyComponent;
-use parent 'Plack::Component';
-use Plack::Util::Accessor qw( res cb );
-
-sub call { return $_[0]->response_cb( $_[0]->res, $_[0]->cb ); }
-
-package main;
 use IO::Handle::Util qw(:io_from);
 use HTTP::Request::Common;
 use Test::More;
 use Plack::Test;
+
+class MyComponent extends Plack::Component is overload('inherited') {
+    has $res is rw;
+    has $cb  is rw;
+
+    method call { $self->response_cb( $res, $cb ) }
+}
 
 # Various kinds of PSGI responses.
 sub generate_responses {
@@ -40,7 +42,8 @@ for my $res ( generate_responses ) {
 
 for my $res ( generate_responses ) {
     my $app = MyComponent->new(
-        res => $res, cb => sub {
+        res => $res, 
+        cb  => sub {
             my $done;
             sub {
                 return if $done;
@@ -52,7 +55,7 @@ for my $res ( generate_responses ) {
                 }
             },
         },
-    );
+    )->to_app;
     test_psgi( $app, sub {
         my $res = $_[0]->(GET '/');
         is $res->content, 'HelloEND';

@@ -6,7 +6,7 @@ use mop;
 use Time::HiRes;
 use Plack::Util;
 
-class Timed extends Plack::Middleware::AccessLog {
+class Timed extends Plack::Middleware::AccessLog is overload('inherited') {
 
     method call ($env) {
 

@@ -1,21 +1,25 @@
-package Plack::Middleware::Runtime;
-use strict;
-use parent qw(Plack::Middleware);
+package Plack::Middleware;
+use v5.16;
+use warnings;
+use mop;
+
 use Plack::Util;
-use Plack::Util::Accessor qw(header_name);
 use Time::HiRes;
 
-sub call {
-    my($self, $env) = @_;
+class Runtime extends Plack::Middleware is overload('inherited') {
+    has $header_name is rw = 'X-Runtime';
 
-    my $start = [ Time::HiRes::gettimeofday ];
-    my $res = $self->app->($env);
+    method call ($env) {
 
-    $self->response_cb($res, sub {
-        my $res = shift;
-        my $req_time = sprintf '%.6f', Time::HiRes::tv_interval($start);
-        Plack::Util::header_set($res->[1], 'X-Runtime', $req_time);
-    });
+        my $start = [ Time::HiRes::gettimeofday ];
+        my $res = $self->app->($env);
+
+        $self->response_cb($res, sub {
+            my $res = shift;
+            my $req_time = sprintf '%.6f', Time::HiRes::tv_interval($start);
+            Plack::Util::header_set($res->[1], $header_name, $req_time);
+        });
+    }
 }
 
 1;

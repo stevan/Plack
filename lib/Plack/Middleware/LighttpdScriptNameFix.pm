@@ -1,27 +1,25 @@
-package Plack::Middleware::LighttpdScriptNameFix;
-use strict;
-use parent qw/Plack::Middleware/;
-use Plack::Util::Accessor qw(script_name);
+package Plack::Middleware;
+use v5.16;
+use warnings;
+use mop;
 
-sub prepare_app {
-    my $self = shift;
+class LighttpdScriptNameFix extends Plack::Middleware is overload('inherited') {
+    has $script_name is rw = '';
 
-    my $script_name = $self->script_name;
-    $script_name = '' unless defined($script_name);
-    $script_name =~ s!/$!!;
-    $self->script_name($script_name);
-}
-
-sub call {
-    my($self, $env) = @_;
-
-    if ($env->{SERVER_SOFTWARE} && $env->{SERVER_SOFTWARE} =~ /lighttpd/) {
-        $env->{PATH_INFO}   = $env->{SCRIPT_NAME} . $env->{PATH_INFO};
-        $env->{SCRIPT_NAME} = $self->script_name;
-        $env->{PATH_INFO}  =~ s/^\Q$env->{SCRIPT_NAME}\E//;
+    method prepare_app {
+        $script_name =~ s!/$!!;
     }
 
-    return $self->app->($env);
+    method call ($env) {
+
+        if ($env->{SERVER_SOFTWARE} && $env->{SERVER_SOFTWARE} =~ /lighttpd/) {
+            $env->{PATH_INFO}   = $env->{SCRIPT_NAME} . $env->{PATH_INFO};
+            $env->{SCRIPT_NAME} = $script_name;
+            $env->{PATH_INFO}  =~ s/^\Q$env->{SCRIPT_NAME}\E//;
+        }
+
+        return $self->app->($env);
+    }
 }
 
 1;

@@ -7,14 +7,8 @@ use Carp;
 use Plack::Util;
 use Scalar::Util qw(weaken);
 
-class BufferedStreaming extends Plack::Middleware is extending_non_mop {
+class BufferedStreaming extends Plack::Middleware is overload('inherited') {
     has $force is rw;
-
-    submethod BUILD {
-        my $args = (@_ == 1 && ref $_[0] eq 'HASH') ? $_[0] : { @_ }; # XXX - remove me
-        $force = $args->{'force'} 
-            if exists $args->{'force'};
-    }
 
     method call ($env) {
 

@@ -1,53 +1,55 @@
-package Plack::Middleware::Auth::Basic;
-use strict;
-use parent qw(Plack::Middleware);
-use Plack::Util::Accessor qw( realm authenticator );
+package Plack::Middleware;
+use v5.16;
+use warnings;
+use mop;
+
 use Scalar::Util;
 use MIME::Base64;
 
-sub prepare_app {
-    my $self = shift;
+class Auth::Basic extends Plack::Middleware is overload('inherited') {
+    has $realm         is rw; 
+    has $authenticator is rw;
 
-    my $auth = $self->authenticator or die 'authenticator is not set';
-    if (Scalar::Util::blessed($auth) && $auth->can('authenticate')) {
-        $self->authenticator(sub { $auth->authenticate(@_[0,1]) }); # because Authen::Simple barfs on 3 params
-    } elsif (ref $auth ne 'CODE') {
-        die 'authenticator should be a code reference or an object that responds to authenticate()';
-    }
-}
+    method prepare_app {
 
-sub call {
-    my($self, $env) = @_;
-
-    my $auth = $env->{HTTP_AUTHORIZATION}
-        or return $self->unauthorized;
-
-    # note the 'i' on the regex, as, according to RFC2617 this is a 
-    # "case-insensitive token to identify the authentication scheme"
-    if ($auth =~ /^Basic (.*)$/i) {
-        my($user, $pass) = split /:/, (MIME::Base64::decode($1) || ":"), 2;
-        $pass = '' unless defined $pass;
-        if ($self->authenticator->($user, $pass, $env)) {
-            $env->{REMOTE_USER} = $user;
-            return $self->app->($env);
+        my $auth = $authenticator or die 'authenticator is not set';
+        if (Scalar::Util::blessed($auth) && $auth->can('authenticate')) {
+            $authenticator = sub { $auth->authenticate(@_[0,1]) }; # because Authen::Simple barfs on 3 params
+        } elsif (ref $auth ne 'CODE') {
+            die 'authenticator should be a code reference or an object that responds to authenticate()';
         }
     }
 
-    return $self->unauthorized;
-}
+    method call ($env) {
 
-sub unauthorized {
-    my $self = shift;
-    my $body = 'Authorization required';
-    return [
-        401,
-        [ 'Content-Type' => 'text/plain',
-          'Content-Length' => length $body,
-          'WWW-Authenticate' => 'Basic realm="' . ($self->realm || "restricted area") . '"' ],
-        [ $body ],
-    ];
-}
+        my $auth = $env->{HTTP_AUTHORIZATION}
+            or return $self->unauthorized;
 
+        # note the 'i' on the regex, as, according to RFC2617 this is a 
+        # "case-insensitive token to identify the authentication scheme"
+        if ($auth =~ /^Basic (.*)$/i) {
+            my($user, $pass) = split /:/, (MIME::Base64::decode($1) || ":"), 2;
+            $pass = '' unless defined $pass;
+            if ($authenticator->($user, $pass, $env)) {
+                $env->{REMOTE_USER} = $user;
+                return $self->app->($env);
+            }
+        }
+
+        return $self->unauthorized;
+    }
+
+    method unauthorized {
+        my $body = 'Authorization required';
+        return [
+            401,
+            [ 'Content-Type' => 'text/plain',
+              'Content-Length' => length $body,
+              'WWW-Authenticate' => 'Basic realm="' . ($realm || "restricted area") . '"' ],
+            [ $body ],
+        ];
+    }
+}
 1;
 
 __END__

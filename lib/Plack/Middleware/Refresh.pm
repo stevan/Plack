@@ -1,26 +1,30 @@
-package Plack::Middleware::Refresh;
-use strict;
-use parent qw(Plack::Middleware);
+package Plack::Middleware;
+use v5.16;
+use warnings;
+use mop;
+
 use Module::Refresh;
-use Plack::Util::Accessor qw(last cooldown);
 
-sub prepare_app {
-    my $self = shift;
-    $self->cooldown(10) unless defined $self->cooldown;
+class Refresh extends Plack::Middleware is overload('inherited') {
+    has $last     is rw; 
+    has $cooldown is rw;
 
-    Module::Refresh->new;
-    $self->last(time - $self->cooldown);
-}
+    method prepare_app {
+        $cooldown = 10 unless defined $cooldown;
 
-sub call {
-    my($self, $env) = @_;
-
-    if (time > $self->last + $self->cooldown) {
-        Module::Refresh->refresh;
-        $self->last(time);
+        Module::Refresh->new;
+        $last = time - $cooldown;
     }
 
-    $self->app->($env);
+    method call ($env) {
+
+        if (time > $last + $cooldown) {
+            Module::Refresh->refresh;
+            $last = time;
+        }
+
+        $self->app->($env);
+    }
 }
 
 1;

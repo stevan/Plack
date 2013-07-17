@@ -1,37 +1,46 @@
-package Plack::Middleware::Static;
-use strict;
+package Plack::Middleware;
+use v5.16;
 use warnings;
-use parent qw/Plack::Middleware/;
+use mop;
+
 use Plack::App::File;
 
-use Plack::Util::Accessor qw( path root encoding pass_through content_type );
+class Static extends Plack::Middleware is overload('inherited') {
+    has $path         is rw; 
+    has $root         is rw; 
+    has $encoding     is rw; 
+    has $pass_through is rw; 
+    has $content_type is rw;
+    has $file         is rw;
 
-sub call {
-    my $self = shift;
-    my $env  = shift;
+    method call ($env) {
 
-    my $res = $self->_handle_static($env);
-    if ($res && not ($self->pass_through and $res->[0] == 404)) {
-        return $res;
+        my $res = $self->_handle_static($env);
+        if ($res && not ($pass_through and $res->[0] == 404)) {
+            return $res;
+        }
+
+        return $self->app->($env);
     }
 
-    return $self->app->($env);
-}
+    submethod _handle_static ($env) {
 
-sub _handle_static {
-    my($self, $env) = @_;
+        my $path_match = $path or return;
+        my $_path = $env->{PATH_INFO};
 
-    my $path_match = $self->path or return;
-    my $path = $env->{PATH_INFO};
+        for ($_path) {
+            my $matched = 'CODE' eq ref $path_match ? $path_match->($_, $env) : $_ =~ $path_match;
+            return unless $matched;
+        }
 
-    for ($path) {
-        my $matched = 'CODE' eq ref $path_match ? $path_match->($_, $env) : $_ =~ $path_match;
-        return unless $matched;
+        $file ||= Plack::App::File->new({ 
+            root         => $root || '.', 
+            encoding     => $encoding, 
+            content_type => $content_type 
+        });
+        local $env->{PATH_INFO} = $_path; # rewrite PATH
+        return $file->call($env);
     }
-
-    $self->{file} ||= Plack::App::File->new({ root => $self->root || '.', encoding => $self->encoding, content_type => $self->content_type });
-    local $env->{PATH_INFO} = $path; # rewrite PATH
-    return $self->{file}->call($env);
 }
 
 1;

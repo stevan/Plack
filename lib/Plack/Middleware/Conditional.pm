@@ -3,17 +3,10 @@ use v5.16;
 use warnings;
 use mop;
 
-class Conditional extends Plack::Middleware is extending_non_mop {
+class Conditional extends Plack::Middleware is overload('inherited') {
     has $condition  is rw; 
     has $middleware is rw;
     has $builder    is rw;
-
-    submethod BUILD {
-        my $args = (@_ == 1 && ref $_[0] eq 'HASH') ? $_[0] : { @_ }; # XXX - remove me
-        $condition  = $args->{'condition'}  if exists $args->{'condition'}; 
-        $middleware = $args->{'middleware'} if exists $args->{'middleware'};
-        $builder    = $args->{'builder'}    if exists $args->{'builder'};
-    }
 
     method prepare_app {
         $self->middleware( $builder->($self->app) );

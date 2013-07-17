@@ -1,26 +1,29 @@
-package Plack::Middleware::LogDispatch;
-use strict;
-use parent qw(Plack::Middleware);
-use Plack::Util::Accessor qw(logger);
+package Plack::Middleware;
+use v5.16;
+use warnings;
+use mop;
+
 use Carp ();
 
-sub prepare_app {
-    my $self = shift;
-    unless ($self->logger) {
-        Carp::croak "logger is not defined";
+class LogDispatch extends Plack::Middleware is overload('inherited') {
+    has $logger is rw;
+
+    method prepare_app {
+        unless ($logger) {
+            Carp::croak "logger is not defined";
+        }
     }
-}
 
-sub call {
-    my($self, $env) = @_;
+    method call ($env) {
 
-    $env->{'psgix.logger'} = sub {
-        my $args = shift;
-        $args->{level} = 'critical' if $args->{level} eq 'fatal';
-        $self->logger->log(%$args);
-    };
+        $env->{'psgix.logger'} = sub {
+            my $args = shift;
+            $args->{level} = 'critical' if $args->{level} eq 'fatal';
+            $logger->log(%$args);
+        };
 
-    $self->app->($env);
+        $self->app->($env);
+    }
 }
 
 1;

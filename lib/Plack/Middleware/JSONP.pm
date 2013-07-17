@@ -1,40 +1,41 @@
-package Plack::Middleware::JSONP;
-use strict;
-use parent qw(Plack::Middleware);
+package Plack::Middleware;
+use v5.16;
+use warnings;
+use mop;
+
 use Plack::Util;
 use URI::Escape ();
 
-use Plack::Util::Accessor qw/callback_key/;
+class JSONP extends Plack::Middleware is overload('inherited') {
+    has $callback_key is rw;
 
-sub prepare_app {
-    my $self = shift;
-    unless (defined $self->callback_key) {
-        $self->callback_key('callback');
+    method prepare_app {
+        unless (defined $callback_key) {
+            $callback_key = 'callback';
+        }
     }
-}
 
-sub call {
-    my($self, $env) = @_;
-    my $res = $self->app->($env);
-    $self->response_cb($res, sub {
-        my $res = shift;
-        if (defined $res->[2]) {
-            my $h = Plack::Util::headers($res->[1]);
-            my $callback_key = $self->callback_key;
-            if ($h->get('Content-Type') =~ m!/(?:json|javascript)! &&
-                $env->{QUERY_STRING} =~ /(?:^|&)$callback_key=([^&]+)/) {
-                my $cb = URI::Escape::uri_unescape($1);
-                if ($cb =~ /^[\w\.\[\]]+$/) {
-                    my $body;
-                    Plack::Util::foreach($res->[2], sub { $body .= $_[0] });
-                    my $jsonp = "$cb($body)";
-                    $res->[2] = [ $jsonp ];
-                    $h->set('Content-Length', length $jsonp);
-                    $h->set('Content-Type', 'text/javascript');
+    method call ($env) {
+        my $res = $self->app->($env);
+        $self->response_cb($res, sub {
+            my $res = shift;
+            if (defined $res->[2]) {
+                my $h = Plack::Util::headers($res->[1]);
+                if ($h->get('Content-Type') =~ m!/(?:json|javascript)! &&
+                    $env->{QUERY_STRING} =~ /(?:^|&)$callback_key=([^&]+)/) {
+                    my $cb = URI::Escape::uri_unescape($1);
+                    if ($cb =~ /^[\w\.\[\]]+$/) {
+                        my $body;
+                        Plack::Util::foreach($res->[2], sub { $body .= $_[0] });
+                        my $jsonp = "$cb($body)";
+                        $res->[2] = [ $jsonp ];
+                        $h->set('Content-Length', length $jsonp);
+                        $h->set('Content-Type', 'text/javascript');
+                    }
                 }
             }
-        }
-    });
+        });
+    }
 }
 
 1;

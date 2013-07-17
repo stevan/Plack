@@ -1,11 +1,15 @@
-package Plack::Middleware::NullLogger;
-use strict;
-use parent qw/Plack::Middleware/;
+package Plack::Middleware;
+use v5.16;
+use warnings;
+use mop;
 
-sub call {
-    my($self, $env) = @_;
-    $env->{'psgix.logger'} = sub { };
-    $self->app->($env);
+class NullLogger extends Plack::Middleware is overload('inherited') {
+
+    method call ($env) {
+        $env->{'psgix.logger'} = sub { };
+        $self->app->($env);
+    }
+
 }
 
 1;

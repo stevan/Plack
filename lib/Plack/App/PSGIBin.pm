@@ -1,18 +1,23 @@
-package Plack::App::PSGIBin;
-use strict;
+package Plack::App;
+use v5.16;
 use warnings;
-use parent qw/Plack::App::File/;
+use mop;
+
 use Plack::Util;
 
-sub allow_path_info { 1 }
+class PSGIBin extends Plack::App::File is overload('inherited') {
 
-sub serve_path {
-    my($self, $env, $file) = @_;
+    has $_compiled = {};
 
-    local @{$env}{qw(SCRIPT_NAME PATH_INFO)} = @{$env}{qw( plack.file.SCRIPT_NAME plack.file.PATH_INFO )};
+    method allow_path_info { 1 }
 
-    my $app = $self->{_compiled}->{$file} ||= Plack::Util::load_psgi($file);
-    $app->($env);
+    method serve_path ($env, $file) {
+
+        local @{$env}{qw(SCRIPT_NAME PATH_INFO)} = @{$env}{qw( plack.file.SCRIPT_NAME plack.file.PATH_INFO )};
+
+        my $app = $_compiled->{$file} ||= Plack::Util::load_psgi($file);
+        $app->($env);
+    }
 }
 
 1;

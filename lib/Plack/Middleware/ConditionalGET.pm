@@ -6,7 +6,7 @@ use mop;
 
 use Plack::Util;
 
-class ConditionalGET extends Plack::Middleware is extending_non_mop {
+class ConditionalGET extends Plack::Middleware is overload('inherited') {
 
     method call ($env) {
 

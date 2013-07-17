@@ -1,53 +1,54 @@
-package Plack::App::CGIBin;
-use strict;
+package Plack::App;
+use v5.16;
 use warnings;
-use parent qw/Plack::App::File/;
-use Plack::Util::Accessor qw( exec_cb );
-use Plack::App::WrapCGI;
+use mop;
 
-sub allow_path_info { 1 }
+use Plack::App::WrapCGI;
 
 my %exec_cache;
 
-sub would_exec {
-    my($self, $file) = @_;
+class CGIBin extends Plack::App::File is overload('inherited') {
+    has $exec_cb is rw;
+    has $_compiled = {};
 
-    return $exec_cache{$file} if exists $exec_cache{$file};
+    method allow_path_info { 1 }
 
-    my $exec_cb = $self->exec_cb || sub { $self->exec_cb_default(@_) };
+    method would_exec ($file) {
 
-    return $exec_cache{$file} = $exec_cb->($file);
-}
+        return $exec_cache{$file} if exists $exec_cache{$file};
 
-sub exec_cb_default {
-    my($self, $file) = @_;
+        my $_exec_cb = $exec_cb || sub { $self->exec_cb_default(@_) };
 
-    if ($file =~ /\.pl$/i) {
-        return 0;
-    } elsif ($self->shebang_for($file) =~ /^\#\!.*perl/) {
-        return 0;
-    } else {
-        return 1;
+        return $exec_cache{$file} = $_exec_cb->($file);
     }
-}
 
-sub shebang_for {
-    my($self, $file) = @_;
+    method exec_cb_default ($file) {
 
-    open my $fh, "<", $file or return '';
-    my $line = <$fh>;
-    return $line;
-}
+        if ($file =~ /\.pl$/i) {
+            return 0;
+        } elsif ($self->shebang_for($file) =~ /^\#\!.*perl/) {
+            return 0;
+        } else {
+            return 1;
+        }
+    }
 
-sub serve_path {
-    my($self, $env, $file) = @_;
+    method shebang_for ($file) {
 
-    local @{$env}{qw(SCRIPT_NAME PATH_INFO)} = @{$env}{qw( plack.file.SCRIPT_NAME plack.file.PATH_INFO )};
+        open my $fh, "<", $file or return '';
+        my $line = <$fh>;
+        return $line;
+    }
 
-    my $app = $self->{_compiled}->{$file} ||= Plack::App::WrapCGI->new(
-        script => $file, execute => $self->would_exec($file),
-    )->to_app;
-    $app->($env);
+    method serve_path ($env, $file) {
+
+        local @{$env}{qw(SCRIPT_NAME PATH_INFO)} = @{$env}{qw( plack.file.SCRIPT_NAME plack.file.PATH_INFO )};
+
+        my $app = $_compiled->{$file} ||= Plack::App::WrapCGI->new(
+            script => $file, execute => $self->would_exec($file),
+        )->to_app;
+        $app->($env);
+    }
 }
 
 1;

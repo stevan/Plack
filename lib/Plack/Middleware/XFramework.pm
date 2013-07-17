@@ -1,23 +1,23 @@
-package Plack::Middleware::XFramework;
-use strict;
+package Plack::Middleware;
+use v5.16;
 use warnings;
-use parent qw/Plack::Middleware/;
+use mop;
 
 use Plack::Util;
-use Plack::Util::Accessor qw( framework );
 
-sub call {
-    my $self = shift;
-
-    my $res = $self->app->( @_ );
-    $self->response_cb($res, sub {
-        my $res = shift;
-        if ($self->framework) {
-            Plack::Util::header_set $res->[1], 'X-Framework' => $self->framework;
-        }
-    });
+class XFramework extends Plack::Middleware is overload('inherited') {
+    has $framework is rw;
+    
+    method call ($env) {
+        my $res = $self->app->( $env );
+        $self->response_cb($res, sub {
+            my $res = shift;
+            if ($self->framework) {
+                Plack::Util::header_set $res->[1], 'X-Framework' => $framework;
+            }
+        });
+    }
 }
-
 1;
 
 __END__

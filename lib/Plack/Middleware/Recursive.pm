@@ -1,90 +1,93 @@
-package Plack::Middleware::Recursive;
-use strict;
-use parent qw(Plack::Middleware);
+package Plack::Middleware;
+use v5.16;
+use warnings;
+use mop;
 
 use Try::Tiny;
 use Scalar::Util qw(blessed);
 
 open my $null_io, "<", \"";
 
-sub call {
-    my($self, $env) = @_;
+class Recursive extends Plack::Middleware is overload('inherited') {
 
-    $env->{'plack.recursive.include'} = $self->recurse_callback($env, 1);
+    method call ($env) {
 
-    my $res = try {
-        $self->app->($env);
-    } catch {
-        if (blessed $_ && $_->isa('Plack::Recursive::ForwardRequest')) {
-            return $self->recurse_callback($env)->($_->path);
-        } else {
-            die $_; # rethrow
-        }
-    };
+        $env->{'plack.recursive.include'} = $self->recurse_callback($env, 1);
 
-    return $res if ref $res eq 'ARRAY';
-
-    return sub {
-        my $respond = shift;
-
-        my $writer;
-        try {
-            $res->(sub { return $writer = $respond->(@_) });
+        my $res = try {
+            $self->app->($env);
         } catch {
-            if (!$writer && blessed $_ && $_->isa('Plack::Recursive::ForwardRequest')) {
-                $res = $self->recurse_callback($env)->($_->path);
-                return ref $res eq 'CODE' ? $res->($respond) : $respond->($res);
+            if (blessed $_ && $_->isa('Plack::Recursive::ForwardRequest')) {
+                return $self->recurse_callback($env)->($_->path);
             } else {
-                die $_;
+                die $_; # rethrow
             }
         };
-    };
+
+        return $res if ref $res eq 'ARRAY';
+
+        return sub {
+            my $respond = shift;
+
+            my $writer;
+            try {
+                $res->(sub { return $writer = $respond->(@_) });
+            } catch {
+                if (!$writer && blessed $_ && $_->isa('Plack::Recursive::ForwardRequest')) {
+                    $res = $self->recurse_callback($env)->($_->path);
+                    return ref $res eq 'CODE' ? $res->($respond) : $respond->($res);
+                } else {
+                    die $_;
+                }
+            };
+        };
+    }
+
+    method recurse_callback ($env, $include) {
+
+        my $old_path_info = $env->{PATH_INFO};
+
+        return sub {
+            my $new_path_info = shift;
+            my($path, $query) = split /\?/, $new_path_info, 2;
+
+            Scalar::Util::weaken($env);
+
+            $env->{PATH_INFO}      = $path;
+            $env->{QUERY_STRING}   = $query;
+            $env->{REQUEST_METHOD} = 'GET';
+            $env->{CONTENT_LENGTH} = 0;
+            $env->{CONTENT_TYPE}   = '';
+            $env->{'psgi.input'}   = $null_io;
+            push @{$env->{'plack.recursive.old_path_info'}}, $old_path_info;
+
+            $include ? $self->app->($env) : $self->call($env);
+        };
+    }
+
 }
 
-sub recurse_callback {
-    my($self, $env, $include) = @_;
+# NOTE:
+# This is kind of annoying, it should 
+# be using the Middleware::Recursive 
+# namespace in my opinion.
+# - SL
+package Plack::Recursive;
+use v5.16;
+use warnings;
+use mop;
 
-    my $old_path_info = $env->{PATH_INFO};
+class ForwardRequest {
+    has $path is ro;
 
-    return sub {
-        my $new_path_info = shift;
-        my($path, $query) = split /\?/, $new_path_info, 2;
+    method throw { die $class->new( @_ ) }
 
-        Scalar::Util::weaken($env);
-
-        $env->{PATH_INFO}      = $path;
-        $env->{QUERY_STRING}   = $query;
-        $env->{REQUEST_METHOD} = 'GET';
-        $env->{CONTENT_LENGTH} = 0;
-        $env->{CONTENT_TYPE}   = '';
-        $env->{'psgi.input'}   = $null_io;
-        push @{$env->{'plack.recursive.old_path_info'}}, $old_path_info;
-
-        $include ? $self->app->($env) : $self->call($env);
-    };
+    method as_string is overload('""') {
+        return "Forwarding to $self->{path}: Your application should be wrapped with Plack::Middleware::Recursive.";
+    }
 }
 
-package Plack::Recursive::ForwardRequest;
-use overload q("") => \&as_string, fallback => 1;
-
-sub new {
-    my($class, $path) = @_;
-    bless { path => $path }, $class;
-}
-
-sub path { $_[0]->{path} }
-
-sub throw {
-    my($class, @args) = @_;
-    die $class->new(@args);
-}
-
-sub as_string {
-    my $self = shift;
-    return "Forwarding to $self->{path}: Your application should be wrapped with Plack::Middleware::Recursive.";
-}
-
-package Plack::Middleware::Recursive;
+package Plack::Middleware;
 
 1;
 

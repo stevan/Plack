@@ -1,131 +1,130 @@
-package Plack::App::File;
-use strict;
+package Plack::App;
+use v5.16;
 use warnings;
-use parent qw/Plack::Component/;
+use mop;
+
 use File::Spec::Unix;
 use Cwd ();
 use Plack::Util;
 use Plack::MIME;
 use HTTP::Date;
 
-use Plack::Util::Accessor qw( root file content_type encoding );
+class File extends Plack::Component is overload('inherited') {
 
-sub should_handle {
-    my($self, $file) = @_;
-    return -f $file;
-}
+    has $root         is rw;
+    has $file         is rw; 
+    has $content_type is rw; 
+    has $encoding     is rw;
 
-sub call {
-    my $self = shift;
-    my $env  = shift;
-
-    my($file, $path_info) = $self->file || $self->locate_file($env);
-    return $file if ref $file eq 'ARRAY';
-
-    if ($path_info) {
-        $env->{'plack.file.SCRIPT_NAME'} = $env->{SCRIPT_NAME} . $env->{PATH_INFO};
-        $env->{'plack.file.SCRIPT_NAME'} =~ s/\Q$path_info\E$//;
-        $env->{'plack.file.PATH_INFO'}   = $path_info;
-    } else {
-        $env->{'plack.file.SCRIPT_NAME'} = $env->{SCRIPT_NAME} . $env->{PATH_INFO};
-        $env->{'plack.file.PATH_INFO'}   = '';
+    method should_handle ($_file) {
+        return -f $_file;
     }
 
-    return $self->serve_path($env, $file);
-}
+    method call ($env) {
 
-sub locate_file {
-    my($self, $env) = @_;
+        my ($_file, $path_info) = $self->file || $self->locate_file($env);
+        return $_file if ref $_file eq 'ARRAY';
 
-    my $path = $env->{PATH_INFO} || '';
-
-    if ($path =~ /\0/) {
-        return $self->return_400;
-    }
-
-    my $docroot = $self->root || ".";
-    my @path = split /[\\\/]/, $path;
-    if (@path) {
-        shift @path if $path[0] eq '';
-    } else {
-        @path = ('.');
-    }
-
-    if (grep $_ eq '..', @path) {
-        return $self->return_403;
-    }
-
-    my($file, @path_info);
-    while (@path) {
-        my $try = File::Spec::Unix->catfile($docroot, @path);
-        if ($self->should_handle($try)) {
-            $file = $try;
-            last;
-        } elsif (!$self->allow_path_info) {
-            last;
+        if ($path_info) {
+            $env->{'plack.file.SCRIPT_NAME'} = $env->{SCRIPT_NAME} . $env->{PATH_INFO};
+            $env->{'plack.file.SCRIPT_NAME'} =~ s/\Q$path_info\E$//;
+            $env->{'plack.file.PATH_INFO'}   = $path_info;
+        } else {
+            $env->{'plack.file.SCRIPT_NAME'} = $env->{SCRIPT_NAME} . $env->{PATH_INFO};
+            $env->{'plack.file.PATH_INFO'}   = '';
         }
-        unshift @path_info, pop @path;
+
+        return $self->serve_path($env, $_file);
     }
 
-    if (!$file) {
-        return $self->return_404;
+    method locate_file ($env) {
+
+        my $path = $env->{PATH_INFO} || '';
+
+        if ($path =~ /\0/) {
+            return $self->return_400;
+        }
+
+        my $docroot = $self->root || ".";
+        my @path = split /[\\\/]/, $path;
+        if (@path) {
+            shift @path if $path[0] eq '';
+        } else {
+            @path = ('.');
+        }
+
+        if (grep $_ eq '..', @path) {
+            return $self->return_403;
+        }
+
+        my($_file, @path_info);
+        while (@path) {
+            my $try = File::Spec::Unix->catfile($docroot, @path);
+            if ($self->should_handle($try)) {
+                $_file = $try;
+                last;
+            } elsif (!$self->allow_path_info) {
+                last;
+            }
+            unshift @path_info, pop @path;
+        }
+
+        if (!$_file) {
+            return $self->return_404;
+        }
+
+        if (!-r $_file) {
+            return $self->return_403;
+        }
+
+        return $_file, join("/", "", @path_info);
     }
 
-    if (!-r $file) {
-        return $self->return_403;
+    method allow_path_info { 0 }
+
+    method serve_path ($env, $_file) {
+
+        my $_content_type = $self->content_type || Plack::MIME->mime_type($_file)
+                           || 'text/plain';
+
+        if ("CODE" eq ref $_content_type) {
+    		$_content_type = $_content_type->($_file);
+        }
+
+        if ($_content_type =~ m!^text/!) {
+            $_content_type .= "; charset=" . ($self->encoding || "utf-8");
+        }
+
+        open my $fh, "<:raw", $_file
+            or return $self->return_403;
+
+        my @stat = stat $_file;
+
+        Plack::Util::set_io_path($fh, Cwd::realpath($_file));
+
+        return [
+            200,
+            [
+                'Content-Type'   => $_content_type,
+                'Content-Length' => $stat[7],
+                'Last-Modified'  => HTTP::Date::time2str( $stat[9] )
+            ],
+            $fh,
+        ];
     }
 
-    return $file, join("/", "", @path_info);
-}
-
-sub allow_path_info { 0 }
-
-sub serve_path {
-    my($self, $env, $file) = @_;
-
-    my $content_type = $self->content_type || Plack::MIME->mime_type($file)
-                       || 'text/plain';
-
-    if ("CODE" eq ref $content_type) {
-		$content_type = $content_type->($file);
+    method return_403 {
+        return [403, ['Content-Type' => 'text/plain', 'Content-Length' => 9], ['forbidden']];
     }
 
-    if ($content_type =~ m!^text/!) {
-        $content_type .= "; charset=" . ($self->encoding || "utf-8");
+    method return_400 {
+        return [400, ['Content-Type' => 'text/plain', 'Content-Length' => 11], ['Bad Request']];
     }
 
-    open my $fh, "<:raw", $file
-        or return $self->return_403;
-
-    my @stat = stat $file;
-
-    Plack::Util::set_io_path($fh, Cwd::realpath($file));
-
-    return [
-        200,
-        [
-            'Content-Type'   => $content_type,
-            'Content-Length' => $stat[7],
-            'Last-Modified'  => HTTP::Date::time2str( $stat[9] )
-        ],
-        $fh,
-    ];
-}
-
-sub return_403 {
-    my $self = shift;
-    return [403, ['Content-Type' => 'text/plain', 'Content-Length' => 9], ['forbidden']];
-}
-
-sub return_400 {
-    my $self = shift;
-    return [400, ['Content-Type' => 'text/plain', 'Content-Length' => 11], ['Bad Request']];
-}
-
-# Hint: subclasses can override this to return undef to pass through 404
-sub return_404 {
-    my $self = shift;
-    return [404, ['Content-Type' => 'text/plain', 'Content-Length' => 9], ['not found']];
+    # Hint: subclasses can override this to return undef to pass through 404
+    method return_404 {
+        return [404, ['Content-Type' => 'text/plain', 'Content-Length' => 9], ['not found']];
+    }
 }
 
 1;

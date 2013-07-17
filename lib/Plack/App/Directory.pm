@@ -1,7 +1,8 @@
-package Plack::App::Directory;
-use parent qw(Plack::App::File);
-use strict;
+package Plack::App;
+use v5.16;
 use warnings;
+use mop;
+
 use Plack::Util;
 use HTTP::Date;
 use Plack::MIME;
@@ -38,72 +39,72 @@ table { width:100%%; }
 </body></html>
 PAGE
 
-sub should_handle {
-    my($self, $file) = @_;
-    return -d $file || -f $file;
-}
+class Directory extends Plack::App::File is overload('inherited') {
 
-sub return_dir_redirect {
-    my ($self, $env) = @_;
-    my $uri = Plack::Request->new($env)->uri;
-    return [ 301,
-        [
-            'Location' => $uri . '/',
-            'Content-Type' => 'text/plain',
-            'Content-Length' => 8,
-        ],
-        [ 'Redirect' ],
-    ];
-}
-
-sub serve_path {
-    my($self, $env, $dir, $fullpath) = @_;
-
-    if (-f $dir) {
-        return $self->SUPER::serve_path($env, $dir, $fullpath);
+    method should_handle ($file) {
+        return -d $file || -f $file;
     }
 
-    my $dir_url = $env->{SCRIPT_NAME} . $env->{PATH_INFO};
-
-    if ($dir_url !~ m{/$}) {
-        return $self->return_dir_redirect($env);
+    method return_dir_redirect ($env) {
+        my $uri = Plack::Request->new($env)->uri;
+        return [ 301,
+            [
+                'Location' => $uri . '/',
+                'Content-Type' => 'text/plain',
+                'Content-Length' => 8,
+            ],
+            [ 'Redirect' ],
+        ];
     }
 
-    my @files = ([ "../", "Parent Directory", '', '', '' ]);
+    method serve_path ($env, $dir, $fullpath) {
 
-    my $dh = DirHandle->new($dir);
-    my @children;
-    while (defined(my $ent = $dh->read)) {
-        next if $ent eq '.' or $ent eq '..';
-        push @children, $ent;
-    }
-
-    for my $basename (sort { $a cmp $b } @children) {
-        my $file = "$dir/$basename";
-        my $url = $dir_url . $basename;
-
-        my $is_dir = -d $file;
-        my @stat = stat _;
-
-        $url = join '/', map {uri_escape($_)} split m{/}, $url;
-
-        if ($is_dir) {
-            $basename .= "/";
-            $url      .= "/";
+        if (-f $dir) {
+            return $self->next::method($env, $dir, $fullpath);
         }
 
-        my $mime_type = $is_dir ? 'directory' : ( Plack::MIME->mime_type($file) || 'text/plain' );
-        push @files, [ $url, $basename, $stat[7], $mime_type, HTTP::Date::time2str($stat[9]) ];
+        my $dir_url = $env->{SCRIPT_NAME} . $env->{PATH_INFO};
+
+        if ($dir_url !~ m{/$}) {
+            return $self->return_dir_redirect($env);
+        }
+
+        my @files = ([ "../", "Parent Directory", '', '', '' ]);
+
+        my $dh = DirHandle->new($dir);
+        my @children;
+        while (defined(my $ent = $dh->read)) {
+            next if $ent eq '.' or $ent eq '..';
+            push @children, $ent;
+        }
+
+        for my $basename (sort { $a cmp $b } @children) {
+            my $file = "$dir/$basename";
+            my $url = $dir_url . $basename;
+
+            my $is_dir = -d $file;
+            my @stat = stat _;
+
+            $url = join '/', map {uri_escape($_)} split m{/}, $url;
+
+            if ($is_dir) {
+                $basename .= "/";
+                $url      .= "/";
+            }
+
+            my $mime_type = $is_dir ? 'directory' : ( Plack::MIME->mime_type($file) || 'text/plain' );
+            push @files, [ $url, $basename, $stat[7], $mime_type, HTTP::Date::time2str($stat[9]) ];
+        }
+
+        my $path  = Plack::Util::encode_html("Index of $env->{PATH_INFO}");
+        my $files = join "\n", map {
+            my $f = $_;
+            sprintf $dir_file, map Plack::Util::encode_html($_), @$f;
+        } @files;
+        my $page  = sprintf $dir_page, $path, $path, $files;
+
+        return [ 200, ['Content-Type' => 'text/html; charset=utf-8'], [ $page ] ];
     }
-
-    my $path  = Plack::Util::encode_html("Index of $env->{PATH_INFO}");
-    my $files = join "\n", map {
-        my $f = $_;
-        sprintf $dir_file, map Plack::Util::encode_html($_), @$f;
-    } @files;
-    my $page  = sprintf $dir_page, $path, $path, $files;
-
-    return [ 200, ['Content-Type' => 'text/html; charset=utf-8'], [ $page ] ];
 }
 
 1;

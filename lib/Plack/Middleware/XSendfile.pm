@@ -1,59 +1,58 @@
-package Plack::Middleware::XSendfile;
-use strict;
+package Plack::Middleware;
+use v5.16;
 use warnings;
-use parent qw(Plack::Middleware);
+use mop;
 
 use Plack::Util;
 use Scalar::Util;
-use Plack::Util::Accessor qw( variation );
 
-sub call {
-    my $self = shift;
-    my $env  = shift;
+class XSendfile extends Plack::Middleware is overload('inherited') {
+    has $variation is rw;
+    
+    method call ($env) {
 
-    my $res = $self->app->($env);
-    $self->response_cb($res, sub {
-        my $res = shift;
-        my($status, $headers, $body) = @$res;
-        return unless defined $body;
+        my $res = $self->app->($env);
+        $self->response_cb($res, sub {
+            my $res = shift;
+            my($status, $headers, $body) = @$res;
+            return unless defined $body;
 
-        if (Scalar::Util::blessed($body) && $body->can('path')) {
-            my $type = $self->_variation($env) || '';
-            my $h = Plack::Util::headers($headers);
-            if ($type && !$h->exists($type)) {
-                if ($type eq 'X-Accel-Redirect') {
-                    my $path = $body->path;
-                    my $url = $self->map_accel_path($env, $path);
-                    $h->set($type => $url) if $url;
-                    $body = [];
-                } elsif ($type eq 'X-Sendfile' or $type eq 'X-Lighttpd-Send-File') {
-                    my $path = $body->path;
-                    $h->set($type => $path) if defined $path;
-                    $body = [];
-                } else {
-                    $env->{'psgi.errors'}->print("Unknown x-sendfile variation: $type");
+            if (Scalar::Util::blessed($body) && $body->can('path')) {
+                my $type = $self->_variation($env) || '';
+                my $h = Plack::Util::headers($headers);
+                if ($type && !$h->exists($type)) {
+                    if ($type eq 'X-Accel-Redirect') {
+                        my $path = $body->path;
+                        my $url = $self->map_accel_path($env, $path);
+                        $h->set($type => $url) if $url;
+                        $body = [];
+                    } elsif ($type eq 'X-Sendfile' or $type eq 'X-Lighttpd-Send-File') {
+                        my $path = $body->path;
+                        $h->set($type => $path) if defined $path;
+                        $body = [];
+                    } else {
+                        $env->{'psgi.errors'}->print("Unknown x-sendfile variation: $type");
+                    }
                 }
             }
-        }
 
-        @$res = ( $status, $headers, $body );
-    });
-}
-
-sub map_accel_path {
-    my($self, $env, $path) = @_;
-
-    if (my $mapping = $env->{HTTP_X_ACCEL_MAPPING}) {
-        my($internal, $external) = split /=/, $mapping, 2;
-        $path =~ s!^\Q$internal\E!$external!i;
+            @$res = ( $status, $headers, $body );
+        });
     }
 
-    return $path;
-}
+    method map_accel_path ($env, $path) {
 
-sub _variation {
-    my($self, $env) = @_;
-    $self->variation || $env->{'plack.xsendfile.type'} || $env->{HTTP_X_SENDFILE_TYPE};
+        if (my $mapping = $env->{HTTP_X_ACCEL_MAPPING}) {
+            my($internal, $external) = split /=/, $mapping, 2;
+            $path =~ s!^\Q$internal\E!$external!i;
+        }
+
+        return $path;
+    }
+
+    method _variation ($env) {
+        $variation || $env->{'plack.xsendfile.type'} || $env->{HTTP_X_SENDFILE_TYPE};
+    }
 }
 
 1;

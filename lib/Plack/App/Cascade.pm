@@ -1,63 +1,66 @@
-package Plack::App::Cascade;
-use strict;
-use base qw(Plack::Component);
+package Plack::App;
+use v5.16;
+use warnings;
+use mop;
 
 use Plack::Util;
-use Plack::Util::Accessor qw(apps catch codes);
 
-sub add {
-    my $self = shift;
-    $self->apps([]) unless $self->apps;
-    push @{$self->apps}, @_;
-}
+class Cascade extends Plack::Component is overload('inherited') {
 
-sub prepare_app {
-    my $self = shift;
-    my %codes = map { $_ => 1 } @{ $self->catch || [ 404 ] };
-    $self->codes(\%codes);
-}
+    has $apps  is rw = []; 
+    has $catch is rw; 
+    has $codes is rw;
 
-sub call {
-    my($self, $env) = @_;
+    method add {
+        push @$apps, @_;
+    }
 
-    return sub {
-        my $respond = shift;
+    method prepare_app {
+        my %codes = map { $_ => 1 } @{ $catch || [ 404 ] };
+        $codes = \%codes;
+    }
 
-        my $done;
-        my $respond_wrapper = sub {
-            my $res = shift;
-            if ($self->codes->{$res->[0]}) {
-                # suppress output by giving the app an
-                # output spool which drops everything on the floor
-                return Plack::Util::inline_object
-                    write => sub { }, close => sub { };
-            } else {
-                $done = 1;
-                return $respond->($res);
+    method call ($env) {
+
+        return sub {
+            my $respond = shift;
+
+            my $done;
+            my $respond_wrapper = sub {
+                my $res = shift;
+                if ($codes->{$res->[0]}) {
+                    # suppress output by giving the app an
+                    # output spool which drops everything on the floor
+                    return Plack::Util::inline_object
+                        write => sub { }, close => sub { };
+                } else {
+                    $done = 1;
+                    return $respond->($res);
+                }
+            };
+
+            my @try = @{$apps || []};
+            my $tries_left = 0 + @try;
+
+            if (not $tries_left) {
+                return $respond->([ 404, [ 'Content-Type' => 'text/html' ], [ '404 Not Found' ] ])
+            }
+
+            for my $app (@try) {
+                my $res = $app->($env);
+                if ($tries_left-- == 1) {
+                    $respond_wrapper = sub { $respond->(shift) };
+                }
+
+                if (ref $res eq 'CODE') {
+                    $res->($respond_wrapper);
+                } else {
+                    $respond_wrapper->($res);
+                }
+                return if $done;
             }
         };
-
-        my @try = @{$self->apps || []};
-        my $tries_left = 0 + @try;
-
-        if (not $tries_left) {
-            return $respond->([ 404, [ 'Content-Type' => 'text/html' ], [ '404 Not Found' ] ])
-        }
-
-        for my $app (@try) {
-            my $res = $app->($env);
-            if ($tries_left-- == 1) {
-                $respond_wrapper = sub { $respond->(shift) };
-            }
-
-            if (ref $res eq 'CODE') {
-                $res->($respond_wrapper);
-            } else {
-                $respond_wrapper->($res);
-            }
-            return if $done;
-        }
-    };
+    }
 }
 
 1;

@@ -1,32 +1,37 @@
-package Plack::Middleware::Log4perl;
-use strict;
-use parent qw(Plack::Middleware);
-use Plack::Util::Accessor qw(category logger conf);
+package Plack::Middleware;
+use v5.16;
+use warnings;
+use mop;
+
 use Carp ();
 
-sub prepare_app {
-    my $self = shift;
+class Log4perl extends Plack::Middleware is overload('inherited') {
+    has $category is rw; 
+    has $logger   is rw; 
+    has $conf     is rw;
 
-    if ($self->conf) {
-        require Log::Log4perl;
-        Log::Log4perl::init($self->conf);
+    method prepare_app {
+
+        if ($conf) {
+            require Log::Log4perl;
+            Log::Log4perl::init($conf);
+        }
+
+        $logger = Log::Log4perl->get_logger($category || '');
     }
 
-    $self->logger( Log::Log4perl->get_logger($self->category || '') );
-}
+    method call ($env) {
 
-sub call {
-    my($self, $env) = @_;
+        $env->{'psgix.logger'} = sub {
+            my $args = shift;
+            my $level = $args->{level};
+            local $Log::Log4perl::caller_depth
+                = $Log::Log4perl::caller_depth + 1;
+            $logger->$level($args->{message});
+        };
 
-    $env->{'psgix.logger'} = sub {
-        my $args = shift;
-        my $level = $args->{level};
-        local $Log::Log4perl::caller_depth
-            = $Log::Log4perl::caller_depth + 1;
-        $self->logger->$level($args->{message});
-    };
-
-    $self->app->($env);
+        $self->app->($env);
+    }
 }
 
 1;

@@ -10,16 +10,10 @@ my %formats = (
     combined => '%h %l %u %t "%r" %>s %b "%{Referer}i" "%{User-agent}i"',
 );
 
-class AccessLog extends Plack::Middleware is extending_non_mop {
+class AccessLog extends Plack::Middleware is overload('inherited') {
     has $logger          is rw;
     has $format          is rw;
     has $compiled_format is rw;
-
-    submethod BUILD {
-        my $args = (@_ == 1 && ref $_[0] eq 'HASH') ? $_[0] : { @_ }; # XXX - remove me
-        $logger = $args->{'logger'} if exists $args->{'logger'};
-        $format = $args->{'format'} if exists $args->{'format'};
-    }
 
     method prepare_app {
         my $fmt = $format || "combined";

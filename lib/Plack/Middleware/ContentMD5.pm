@@ -6,7 +6,7 @@ use mop;
 use Plack::Util;
 use Digest::MD5 qw/md5_hex/;
 
-class ContentMD5 extends Plack::Middleware is extending_non_mop {
+class ContentMD5 extends Plack::Middleware is overload('inherited') {
 
     method call ($env) {
         my $res  = $self->app->($env);

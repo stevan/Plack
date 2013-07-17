@@ -5,7 +5,7 @@ use mop;
 
 use Plack::Util;
 
-class Chunked extends Plack::Middleware is extending_non_mop {
+class Chunked extends Plack::Middleware is overload('inherited') {
 
     method call ($env) {
         my $res = $self->app->($env);

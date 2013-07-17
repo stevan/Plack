@@ -1,7 +1,8 @@
-package Plack::Middleware::SimpleLogger;
-use strict;
-use parent qw(Plack::Middleware);
-use Plack::Util::Accessor qw(level);
+package Plack::Middleware;
+use v5.16;
+use warnings;
+use mop;
+
 use POSIX ();
 use Scalar::Util ();
 
@@ -9,38 +10,39 @@ use Scalar::Util ();
 my $i = 0;
 my %level_numbers = map { $_ => $i++ } qw(debug info warn error fatal);
 
-sub call {
-    my($self, $env) = @_;
+class SimpleLogger extends Plack::Middleware is overload('inherited') {
+    has $level is rw;
 
-    my $min = $level_numbers{ $self->level || "debug" };
+    method call ($env) {
 
-    my $env_ref = $env;
-    Scalar::Util::weaken($env_ref);
+        my $min = $level_numbers{ $level || "debug" };
 
-    $env->{'psgix.logger'} = sub {
-        my $args = shift;
+        my $env_ref = $env;
+        Scalar::Util::weaken($env_ref);
 
-        if ($level_numbers{$args->{level}} >= $min) {
-            $env_ref->{'psgi.errors'}->print($self->format_message($args->{level}, $args->{message}));
-        }
-    };
+        $env->{'psgix.logger'} = sub {
+            my $args = shift;
 
-    $self->app->($env);
-}
+            if ($level_numbers{$args->{level}} >= $min) {
+                $env_ref->{'psgi.errors'}->print($self->format_message($args->{level}, $args->{message}));
+            }
+        };
 
-sub format_time {
-    my $old_locale = POSIX::setlocale(&POSIX::LC_ALL);
-    POSIX::setlocale(&POSIX::LC_ALL, 'C');
-    my $out = POSIX::strftime(@_);
-    POSIX::setlocale(&POSIX::LC_ALL, $old_locale);
-    return $out;
-}
+        $self->app->($env);
+    }
 
-sub format_message {
-    my($self, $level, $message) = @_;
+    submethod format_time {
+        my $old_locale = POSIX::setlocale(&POSIX::LC_ALL);
+        POSIX::setlocale(&POSIX::LC_ALL, 'C');
+        my $out = POSIX::strftime(@_);
+        POSIX::setlocale(&POSIX::LC_ALL, $old_locale);
+        return $out;
+    }
 
-    my $time = format_time("%Y-%m-%dT%H:%M:%S", localtime);
-    sprintf "%s [%s #%d] %s: %s\n", uc substr($level, 0, 1), $time, $$, uc $level, $message;
+    method format_message ($_level, $message) {
+        my $time = $self->format_time("%Y-%m-%dT%H:%M:%S", localtime);
+        sprintf "%s [%s #%d] %s: %s\n", uc substr($_level, 0, 1), $time, $$, uc $_level, $message;
+    }
 }
 
 1;

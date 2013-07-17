@@ -1,23 +1,25 @@
-package Plack::Middleware::RearrangeHeaders;
-use strict;
+package Plack::Middleware;
+use v5.16;
 use warnings;
-use parent qw( Plack::Middleware );
+use mop;
 
 use HTTP::Headers;
 
-sub call {
-    my $self = shift;
+class RearrangeHeaders extends Plack::Middleware is overload('inherited') {
 
-    my $res = $self->app->(@_);
-    $self->response_cb($res, sub {
-        my $res = shift;
+    method call ($env) {
 
-        my $h = HTTP::Headers->new(@{$res->[1]});
-        my @new_headers;
-        $h->scan(sub { push @new_headers, @_ });
+        my $res = $self->app->($env);
+        $self->response_cb($res, sub {
+            my $res = shift;
 
-        $res->[1] = \@new_headers;
-    });
+            my $h = HTTP::Headers->new(@{$res->[1]});
+            my @new_headers;
+            $h->scan(sub { push @new_headers, @_ });
+
+            $res->[1] = \@new_headers;
+        });
+    }
 }
 
 1;

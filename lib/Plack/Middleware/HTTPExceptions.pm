@@ -8,13 +8,8 @@ use Try::Tiny;
 use Scalar::Util 'blessed';
 use HTTP::Status ();
 
-class HTTPExceptions extends Plack::Middleware is extending_non_mop {
+class HTTPExceptions extends Plack::Middleware is overload('inherited') {
     has $rethrow is rw;
-
-    submethod BUILD {
-        my $args = (@_ == 1 && ref $_[0] eq 'HASH') ? $_[0] : { @_ }; # XXX - remove me
-        $rethrow = $args->{'rethrow'} if exists $args->{'rethrow'};
-    }
 
     method prepare_app {
         $rethrow = 1 if ($ENV{PLACK_ENV} || '') eq 'development';

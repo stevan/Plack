@@ -1,29 +1,31 @@
-package Plack::Middleware::SimpleContentFilter;
-use strict;
+package Plack::Middleware;
+use v5.16;
 use warnings;
-use parent qw( Plack::Middleware );
+use mop;
 
 use Plack::Util;
-use Plack::Util::Accessor qw( filter );
 
-sub call {
-    my $self = shift;
+class SimpleContentFilter extends Plack::Middleware is overload('inherited') {
+    has $filter is rw;
 
-    my $res = $self->app->(@_);
-    $self->response_cb($res, sub {
-        my $res = shift;
-        my $h = Plack::Util::headers($res->[1]);
-        return unless $h->get('Content-Type');
-        if ($h->get('Content-Type') =~ m!^text/!) {
-            return sub {
-                my $chunk = shift;
-                return unless defined $chunk;
-                local $_ = $chunk;
-                $self->filter->();
-                return $_;
-            };
-        }
-    });
+    method call ($env) {
+
+        my $res = $self->app->($env);
+        $self->response_cb($res, sub {
+            my $res = shift;
+            my $h = Plack::Util::headers($res->[1]);
+            return unless $h->get('Content-Type');
+            if ($h->get('Content-Type') =~ m!^text/!) {
+                return sub {
+                    my $chunk = shift;
+                    return unless defined $chunk;
+                    local $_ = $chunk;
+                    $filter->();
+                    return $_;
+                };
+            }
+        });
+    }
 }
 
 1;

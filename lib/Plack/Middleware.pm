@@ -1,19 +1,22 @@
-package Plack::Middleware;
-use strict;
+package Plack;
+use v5.16;
 use warnings;
-use Carp ();
-use parent qw(Plack::Component);
-use Plack::Util;
-use Plack::Util::Accessor qw( app );
+use mop;
 
-sub wrap {
-    my($self, $app, @args) = @_;
-    if (ref $self) {
-        $self->{app} = $app;
-    } else {
-        $self = $self->new({ app => $app, @args });
+use Carp ();
+use Plack::Util;
+
+class Middleware extends Plack::Component is overload('inherited'), abstract {
+    has $app is rw;
+
+    method wrap ($_app, @args) {
+        if (ref $self) {
+            $app = $_app;
+        } else {
+            $self = $self->new({ app => $_app, @args });
+        }
+        return $self->to_app;
     }
-    return $self->to_app;
 }
 
 1;
