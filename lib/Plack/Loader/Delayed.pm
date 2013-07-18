@@ -1,23 +1,26 @@
-package Plack::Loader::Delayed;
-use strict;
-use parent qw(Plack::Loader);
+package Plack::Loader;
+use v5.16;
+use warnings;
+use mop;
 
-sub preload_app {
-    my($self, $builder) = @_;
-    $self->{builder} = $builder;
-}
+class Delayed extends Plack::Loader {
+    has $builder;
 
-sub run {
-    my($self, $server) = @_;
+    method preload_app ($_builder) {
+        $builder = $builder;
+    }
 
-    my $compiled;
-    my $app = sub {
-        $compiled ||= $self->{builder}->();
-        $compiled->(@_);
-    };
+    method run ($server) {
 
-    $server->{psgi_app_builder} = $self->{builder};
-    $server->run($app);
+        my $compiled;
+        my $app = sub {
+            $compiled ||= $builder->();
+            $compiled->(@_);
+        };
+
+        $server->{psgi_app_builder} = $builder;
+        $server->run($app);
+    }
 }
 
 1;

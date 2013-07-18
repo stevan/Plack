@@ -1,87 +1,86 @@
-package Plack::Loader;
-use strict;
+package Plack;
+use v5.16;
+use warnings;
+use mop;
+
 use Carp ();
 use Plack::Util;
 use Try::Tiny;
 
-sub new {
-    my $class = shift;
-    bless {}, $class;
-}
+class Loader {
 
-sub watch {
-    # do nothing. Override in subclass
-}
+    has $app;
 
-sub auto {
-    my($class, @args) = @_;
+    method watch {
+        # do nothing. Override in subclass
+    }
 
-    my $backend = $class->guess
-        or Carp::croak("Couldn't auto-guess server server implementation. Set it with PLACK_SERVER");
+    method auto (@args) {
 
-    my $server = try {
-        $class->load($backend, @args);
-    } catch {
-        if (($ENV{PLACK_ENV}||'') eq 'development' or !/^Can't locate /) {
-            warn "Autoloading '$backend' backend failed. Falling back to the Standalone. ",
-                "(You might need to install Plack::Handler::$backend from CPAN.  Caught error was: $_)\n"
-                    if $ENV{PLACK_ENV} && $ENV{PLACK_ENV} eq 'development';
+        my $backend = $class->guess
+            or Carp::croak("Couldn't auto-guess server server implementation. Set it with PLACK_SERVER");
+
+        my $server = try {
+            $class->load($backend, @args);
+        } catch {
+            if (($ENV{PLACK_ENV}||'') eq 'development' or !/^Can't locate /) {
+                warn "Autoloading '$backend' backend failed. Falling back to the Standalone. ",
+                    "(You might need to install Plack::Handler::$backend from CPAN.  Caught error was: $_)\n"
+                        if $ENV{PLACK_ENV} && $ENV{PLACK_ENV} eq 'development';
+            }
+            $class->load('Standalone' => @args);
+        };
+
+        return $server;
+    }
+
+    method load ($server, @args) {
+
+        my ($server_class, $error);
+        try {
+            $server_class = Plack::Util::load_class($server, 'Plack::Handler');
+        } catch {
+            $error ||= $_;
+        };
+
+        if ($server_class) {
+            $server_class->new(@args);
+        } else {
+            die $error;
         }
-        $class->load('Standalone' => @args);
-    };
-
-    return $server;
-}
-
-sub load {
-    my($class, $server, @args) = @_;
-
-    my($server_class, $error);
-    try {
-        $server_class = Plack::Util::load_class($server, 'Plack::Handler');
-    } catch {
-        $error ||= $_;
-    };
-
-    if ($server_class) {
-        $server_class->new(@args);
-    } else {
-        die $error;
     }
-}
 
-sub preload_app {
-    my($self, $builder) = @_;
-    $self->{app} = $builder->();
-}
-
-sub guess {
-    my $class = shift;
-
-    my $env = $class->env;
-
-    return $env->{PLACK_SERVER} if $env->{PLACK_SERVER};
-
-    if ($env->{PHP_FCGI_CHILDREN} || $env->{FCGI_ROLE} || $env->{FCGI_SOCKET_PATH}) {
-        return "FCGI";
-    } elsif ($env->{GATEWAY_INTERFACE}) {
-        return "CGI";
-    } elsif (exists $INC{"Coro.pm"}) {
-        return "Corona";
-    } elsif (exists $INC{"AnyEvent.pm"}) {
-        return "Twiggy";
-    } elsif (exists $INC{"POE.pm"}) {
-        return "POE";
-    } else {
-        return "Standalone";
+    method preload_app ($builder) {
+        $app = $builder->();
     }
-}
 
-sub env { \%ENV }
+    method guess {
 
-sub run {
-    my($self, $server, $builder) = @_;
-    $server->run($self->{app});
+        my $env = $class->env;
+
+        return $env->{PLACK_SERVER} if $env->{PLACK_SERVER};
+
+        if ($env->{PHP_FCGI_CHILDREN} || $env->{FCGI_ROLE} || $env->{FCGI_SOCKET_PATH}) {
+            return "FCGI";
+        } elsif ($env->{GATEWAY_INTERFACE}) {
+            return "CGI";
+        } elsif (exists $INC{"Coro.pm"}) {
+            return "Corona";
+        } elsif (exists $INC{"AnyEvent.pm"}) {
+            return "Twiggy";
+        } elsif (exists $INC{"POE.pm"}) {
+            return "POE";
+        } else {
+            return "Standalone";
+        }
+    }
+
+    method env { \%ENV }
+
+    method run ($server, $builder) {
+        $server->run( $app );
+    }
+
 }
 
 1;

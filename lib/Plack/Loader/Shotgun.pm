@@ -1,6 +1,8 @@
-package Plack::Loader::Shotgun;
-use strict;
-use parent qw(Plack::Loader);
+package Plack::Loader;
+use v5.16;
+use warnings;
+use mop;
+
 use Storable;
 use Try::Tiny;
 use Plack::Middleware::BufferedStreaming;
@@ -15,51 +17,54 @@ PLACK_SHOTGUN_MEMORY_LEAK on.
 
 DIE
 
-sub preload_app {
-    my($self, $builder) = @_;
-    $self->{builder} = sub { Plack::Middleware::BufferedStreaming->wrap($builder->()) };
-}
+class Shotgun extends Plack::Loader {
 
-sub run {
-    my($self, $server) = @_;
+    has $builder;
 
-    my $app = sub {
-        my $env = shift;
+    method preload_app ($_builder) {
+        $builder = sub { Plack::Middleware::BufferedStreaming->wrap( $_builder->() ) };
+    }
 
-        pipe my $read, my $write;
+    method run ($server) {
 
-        my $pid = fork;
-        if ($pid) {
-            # parent
-            close $write;
-            my $res = Storable::thaw(join '', <$read>);
-            close $read;
-            waitpid($pid, 0);
+        my $app = sub {
+            my $env = shift;
 
-            return $res;
-        } else {
-            # child
-            close $read;
+            pipe my $read, my $write;
 
-            my $res;
-            try {
-                $env->{'psgi.streaming'} = 0;
-                $res = $self->{builder}->()->($env);
-                my @body;
-                Plack::Util::foreach($res->[2], sub { push @body, $_[0] });
-                $res->[2] = \@body;
-            } catch {
-                $env->{'psgi.errors'}->print($_);
-                $res = [ 500, [ "Content-Type", "text/plain" ], [ "Internal Server Error" ] ];
-            };
+            my $pid = fork;
+            if ($pid) {
+                # parent
+                close $write;
+                my $res = Storable::thaw(join '', <$read>);
+                close $read;
+                waitpid($pid, 0);
 
-            print {$write} Storable::freeze($res);
-            close $write;
-            exit;
-        }
-    };
+                return $res;
+            } else {
+                # child
+                close $read;
 
-    $server->run($app);
+                my $res;
+                try {
+                    $env->{'psgi.streaming'} = 0;
+                    $res = $builder->()->($env);
+                    my @body;
+                    Plack::Util::foreach($res->[2], sub { push @body, $_[0] });
+                    $res->[2] = \@body;
+                } catch {
+                    $env->{'psgi.errors'}->print($_);
+                    $res = [ 500, [ "Content-Type", "text/plain" ], [ "Internal Server Error" ] ];
+                };
+
+                print {$write} Storable::freeze($res);
+                close $write;
+                exit;
+            }
+        };
+
+        $server->run($app);
+    }
 }
 
 1;
