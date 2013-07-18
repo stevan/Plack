@@ -1,5 +1,9 @@
-package Plack::Handler;
-use strict;
+package Plack;
+use v5.16;
+use warnings;
+use mop;
+
+class Handler is abstract {}
 
 1;
 

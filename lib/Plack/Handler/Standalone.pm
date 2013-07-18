@@ -1,7 +1,9 @@
-package Plack::Handler::Standalone;
-use strict;
+package Plack::Handler;
+use v5.16;
 use warnings;
-use parent qw( Plack::Handler::HTTP::Server::PSGI );
+use mop;
+
+class Standalone extends Plack::Handler::HTTP::Server::PSGI {}
 
 1;
 
