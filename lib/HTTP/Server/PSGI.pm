@@ -1,6 +1,7 @@
-package HTTP::Server::PSGI;
-use strict;
+package HTTP::Server;
+use v5.16;
 use warnings;
+use mop;
 
 use Carp ();
 use Plack;
@@ -31,262 +32,260 @@ BEGIN {
 use constant MAX_REQUEST_SIZE => 131072;
 use constant MSWin32          => $^O eq 'MSWin32';
 
-sub new {
-    my($class, %args) = @_;
+class PSGI {
 
-    my $self = bless {
-        host               => $args{host} || 0,
-        port               => $args{port} || 8080,
-        timeout            => $args{timeout} || 300,
-        server_software    => $args{server_software} || $class,
-        server_ready       => $args{server_ready} || sub {},
-        ssl                => $args{ssl},
-        ipv6               => $args{ipv6},
-        ssl_key_file       => $args{ssl_key_file},
-        ssl_cert_file      => $args{ssl_cert_file},
-    }, $class;
+    has $host            = 0;
+    has $port            = 8080;
+    has $timeout         = 300;
+    has $server_software = ${^CLASS}->name;
+    has $server_ready    = do { sub {} };
+    has $listen_sock;
+    has $ssl;
+    has $ipv6;
+    has $ssl_key_file;
+    has $ssl_cert_file;
 
-    $self;
-}
-
-sub run {
-    my($self, $app) = @_;
-    $self->setup_listener();
-    $self->accept_loop($app);
-}
-
-sub prepare_socket_class {
-    my($self, $args) = @_;
-
-    if ($self->{ssl} && $self->{ipv6}) {
-        Carp::croak("SSL and IPv6 are not supported at the same time (yet). Choose one.");
+    method run ($app) {
+        $self->setup_listener();
+        $self->accept_loop($app);
     }
 
-    if ($self->{ssl}) {
-        eval { require IO::Socket::SSL; 1 }
-            or Carp::croak("SSL suport requires IO::Socket::SSL");
-        $args->{SSL_key_file}  = $self->{ssl_key_file};
-        $args->{SSL_cert_file} = $self->{ssl_cert_file};
-        return "IO::Socket::SSL";
-    } elsif ($self->{ipv6}) {
-        eval { require IO::Socket::IP; 1 }
-            or Carp::croak("IPv6 support requires IO::Socket::IP");
-        $self->{host}      ||= '::';
-        $args->{LocalAddr} ||= '::';
-        return "IO::Socket::IP";
-    }
+    method prepare_socket_class ($args) {
 
-    return "IO::Socket::INET";
-}
-
-sub setup_listener {
-    my $self = shift;
-
-    my %args = (
-        Listen    => SOMAXCONN,
-        LocalPort => $self->{port},
-        LocalAddr => $self->{host},
-        Proto     => 'tcp',
-        ReuseAddr => 1,
-    );
-
-    my $class = $self->prepare_socket_class(\%args);
-    $self->{listen_sock} ||= $class->new(%args)
-        or die "failed to listen to port $self->{port}: $!";
-
-    $self->{server_ready}->({ %$self, proto => $self->{ssl} ? 'https' : 'http' });
-}
-
-sub accept_loop {
-    my($self, $app) = @_;
-
-    $app = Plack::Middleware::ContentLength->wrap($app);
-
-    while (1) {
-        local $SIG{PIPE} = 'IGNORE';
-        if (my $conn = $self->{listen_sock}->accept) {
-            $conn->setsockopt(IPPROTO_TCP, TCP_NODELAY, 1)
-                or die "setsockopt(TCP_NODELAY) failed:$!";
-            my $env = {
-                SERVER_PORT => $self->{port},
-                SERVER_NAME => $self->{host},
-                SCRIPT_NAME => '',
-                REMOTE_ADDR => $conn->peerhost,
-                REMOTE_PORT => $conn->peerport || 0,
-                'psgi.version' => [ 1, 1 ],
-                'psgi.errors'  => *STDERR,
-                'psgi.url_scheme' => $self->{ssl} ? 'https' : 'http',
-                'psgi.run_once'     => Plack::Util::FALSE,
-                'psgi.multithread'  => Plack::Util::FALSE,
-                'psgi.multiprocess' => Plack::Util::FALSE,
-                'psgi.streaming'    => Plack::Util::TRUE,
-                'psgi.nonblocking'  => Plack::Util::FALSE,
-                'psgix.harakiri'    => Plack::Util::TRUE,
-                'psgix.input.buffered' => Plack::Util::TRUE,
-                'psgix.io'          => $conn,
-            };
-
-            $self->handle_connection($env, $conn, $app);
-            $conn->close;
-            last if $env->{'psgix.harakiri.commit'};
+        if ($ssl && $ipv6) {
+            Carp::croak("SSL and IPv6 are not supported at the same time (yet). Choose one.");
         }
-    }
-}
 
-sub handle_connection {
-    my($self, $env, $conn, $app) = @_;
-
-    my $buf = '';
-    my $res = [ 400, [ 'Content-Type' => 'text/plain' ], [ 'Bad Request' ] ];
-
-    while (1) {
-        my $rlen = $self->read_timeout(
-            $conn, \$buf, MAX_REQUEST_SIZE - length($buf), length($buf),
-            $self->{timeout},
-        ) or return;
-        my $reqlen = parse_http_request($buf, $env);
-        if ($reqlen >= 0) {
-            $buf = substr $buf, $reqlen;
-            if (my $cl = $env->{CONTENT_LENGTH}) {
-                my $buffer = Stream::Buffered->new($cl);
-                while ($cl > 0) {
-                    my $chunk;
-                    if (length $buf) {
-                        $chunk = $buf;
-                        $buf = '';
-                    } else {
-                        $self->read_timeout($conn, \$chunk, $cl, 0, $self->{timeout})
-                            or return;
-                    }
-                    $buffer->print($chunk);
-                    $cl -= length $chunk;
-                }
-                $env->{'psgi.input'} = $buffer->rewind;
-            } else {
-                open my $input, "<", \$buf;
-                $env->{'psgi.input'} = $input;
-            }
-
-            $res = Plack::Util::run_app $app, $env;
-            last;
+        if ($ssl) {
+            eval { require IO::Socket::SSL; 1 }
+                or Carp::croak("SSL suport requires IO::Socket::SSL");
+            $args->{SSL_key_file}  = $ssl_key_file;
+            $args->{SSL_cert_file} = $ssl_cert_file;
+            return "IO::Socket::SSL";
+        } elsif ($ipv6) {
+            eval { require IO::Socket::IP; 1 }
+                or Carp::croak("IPv6 support requires IO::Socket::IP");
+            $host ||= '::';
+            $args->{LocalAddr} ||= '::';
+            return "IO::Socket::IP";
         }
-        if ($reqlen == -2) {
-            # request is incomplete, do nothing
-        } elsif ($reqlen == -1) {
-            # error, close conn
-            last;
-        }
+
+        return "IO::Socket::INET";
     }
 
-    if (ref $res eq 'ARRAY') {
-        $self->_handle_response($res, $conn);
-    } elsif (ref $res eq 'CODE') {
-        $res->(sub {
-            $self->_handle_response($_[0], $conn);
+    method setup_listener {
+
+        my %args = (
+            Listen    => SOMAXCONN,
+            LocalPort => $port,
+            LocalAddr => $host,
+            Proto     => 'tcp',
+            ReuseAddr => 1,
+        );
+
+        my $socket_class = $self->prepare_socket_class(\%args);
+        $listen_sock ||= $socket_class->new(%args)
+            or die "failed to listen to port $port: $!";
+
+        $server_ready->({ 
+            host            => $host,            
+            port            => $port,            
+            timeout         => $timeout,         
+            server_software => $server_software, 
+            server_ready    => $server_ready,    
+            listen_sock     => $listen_sock,
+            ssl             => $ssl,
+            ipv6            => $ipv6,
+            ssl_key_file    => $ssl_key_file,
+            ssl_cert_file   => $ssl_cert_file,
+            proto           => $ssl ? 'https' : 'http' 
         });
-    } else {
-        die "Bad response $res";
     }
 
-    return;
-}
+    method accept_loop ($app) {
 
-sub _handle_response {
-    my($self, $res, $conn) = @_;
+        $app = Plack::Middleware::ContentLength->wrap($app);
 
-    my @lines = (
-        "Date: @{[HTTP::Date::time2str()]}\015\012",
-        "Server: $self->{server_software}\015\012",
-    );
+        while (1) {
+            local $SIG{PIPE} = 'IGNORE';
+            if (my $conn = $listen_sock->accept) {
+                $conn->setsockopt(IPPROTO_TCP, TCP_NODELAY, 1)
+                    or die "setsockopt(TCP_NODELAY) failed:$!";
+                my $env = {
+                    SERVER_PORT => $port,
+                    SERVER_NAME => $host,
+                    SCRIPT_NAME => '',
+                    REMOTE_ADDR => $conn->peerhost,
+                    REMOTE_PORT => $conn->peerport || 0,
+                    'psgi.version' => [ 1, 1 ],
+                    'psgi.errors'  => *STDERR,
+                    'psgi.url_scheme' => $ssl ? 'https' : 'http',
+                    'psgi.run_once'     => Plack::Util::FALSE,
+                    'psgi.multithread'  => Plack::Util::FALSE,
+                    'psgi.multiprocess' => Plack::Util::FALSE,
+                    'psgi.streaming'    => Plack::Util::TRUE,
+                    'psgi.nonblocking'  => Plack::Util::FALSE,
+                    'psgix.harakiri'    => Plack::Util::TRUE,
+                    'psgix.input.buffered' => Plack::Util::TRUE,
+                    'psgix.io'          => $conn,
+                };
 
-    Plack::Util::header_iter($res->[1], sub {
-        my ($k, $v) = @_;
-        push @lines, "$k: $v\015\012";
-    });
-
-    unshift @lines, "HTTP/1.0 $res->[0] @{[ HTTP::Status::status_message($res->[0]) ]}\015\012";
-    push @lines, "\015\012";
-
-    $self->write_all($conn, join('', @lines), $self->{timeout})
-        or return;
-
-    if (defined $res->[2]) {
-        my $err;
-        my $done;
-        {
-            local $@;
-            eval {
-                Plack::Util::foreach(
-                    $res->[2],
-                    sub {
-                        $self->write_all($conn, $_[0], $self->{timeout})
-                            or die "failed to send all data\n";
-                    },
-                );
-                $done = 1;
-            };
-            $err = $@;
-        };
-        unless ($done) {
-            if ($err =~ /^failed to send all data\n/) {
-                return;
-            } else {
-                die $err;
+                $self->handle_connection($env, $conn, $app);
+                $conn->close;
+                last if $env->{'psgix.harakiri.commit'};
             }
         }
-    } else {
-        return Plack::Util::inline_object
-            write => sub { $self->write_all($conn, $_[0], $self->{timeout}) },
-            close => sub { };
     }
-}
 
-# returns 1 if socket is ready, undef on timeout
-sub do_timeout {
-    my ($self, $cb, $timeout) = @_;
-    local $SIG{ALRM} = sub {};
-    my $wait_until = time + $timeout;
-    alarm($timeout);
-    my $ret;
-    while (1) {
-        if ($ret = $cb->()) {
-            last;
-        } elsif (! (! defined($ret) && $! == EINTR)) {
-            undef $ret;
-            last;
+    method handle_connection ($env, $conn, $app) {
+
+        my $buf = '';
+        my $res = [ 400, [ 'Content-Type' => 'text/plain' ], [ 'Bad Request' ] ];
+
+        while (1) {
+            my $rlen = $self->read_timeout(
+                $conn, \$buf, MAX_REQUEST_SIZE - length($buf), length($buf),
+                $timeout,
+            ) or return;
+            my $reqlen = parse_http_request($buf, $env);
+            if ($reqlen >= 0) {
+                $buf = substr $buf, $reqlen;
+                if (my $cl = $env->{CONTENT_LENGTH}) {
+                    my $buffer = Stream::Buffered->new($cl);
+                    while ($cl > 0) {
+                        my $chunk;
+                        if (length $buf) {
+                            $chunk = $buf;
+                            $buf = '';
+                        } else {
+                            $self->read_timeout($conn, \$chunk, $cl, 0, $timeout)
+                                or return;
+                        }
+                        $buffer->print($chunk);
+                        $cl -= length $chunk;
+                    }
+                    $env->{'psgi.input'} = $buffer->rewind;
+                } else {
+                    open my $input, "<", \$buf;
+                    $env->{'psgi.input'} = $input;
+                }
+
+                $res = Plack::Util::run_app $app, $env;
+                last;
+            }
+            if ($reqlen == -2) {
+                # request is incomplete, do nothing
+            } elsif ($reqlen == -1) {
+                # error, close conn
+                last;
+            }
         }
-        # got EINTR
-        my $left = $wait_until - time;
-        last if $left <= 0;
-        alarm($left + $alarm_interval);
+
+        if (ref $res eq 'ARRAY') {
+            $self->_handle_response($res, $conn);
+        } elsif (ref $res eq 'CODE') {
+            $res->(sub {
+                $self->_handle_response($_[0], $conn);
+            });
+        } else {
+            die "Bad response $res";
+        }
+
+        return;
     }
-    alarm(0);
-    $ret;
-}
 
-# returns (positive) number of bytes read, or undef if the socket is to be closed
-sub read_timeout {
-    my ($self, $sock, $buf, $len, $off, $timeout) = @_;
-    $self->do_timeout(sub { $sock->sysread($$buf, $len, $off) }, $timeout);
-}
+    method _handle_response ($res, $conn) {
 
-# returns (positive) number of bytes written, or undef if the socket is to be closed
-sub write_timeout {
-    my ($self, $sock, $buf, $len, $off, $timeout) = @_;
-    $self->do_timeout(sub { $sock->syswrite($buf, $len, $off) }, $timeout);
-}
+        my @lines = (
+            "Date: @{[HTTP::Date::time2str()]}\015\012",
+            "Server: $server_software\015\012",
+        );
 
-# writes all data in buf and returns number of bytes written or undef if failed
-sub write_all {
-    my ($self, $sock, $buf, $timeout) = @_;
-    return 0 unless defined $buf;
-    my $off = 0;
-    while (my $len = length($buf) - $off) {
-        my $ret = $self->write_timeout($sock, $buf, $len, $off, $timeout)
+        Plack::Util::header_iter($res->[1], sub {
+            my ($k, $v) = @_;
+            push @lines, "$k: $v\015\012";
+        });
+
+        unshift @lines, "HTTP/1.0 $res->[0] @{[ HTTP::Status::status_message($res->[0]) ]}\015\012";
+        push @lines, "\015\012";
+
+        $self->write_all($conn, join('', @lines), $timeout)
             or return;
-        $off += $ret;
+
+        if (defined $res->[2]) {
+            my $err;
+            my $done;
+            {
+                local $@;
+                eval {
+                    Plack::Util::foreach(
+                        $res->[2],
+                        sub {
+                            $self->write_all($conn, $_[0], $timeout)
+                                or die "failed to send all data\n";
+                        },
+                    );
+                    $done = 1;
+                };
+                $err = $@;
+            };
+            unless ($done) {
+                if ($err =~ /^failed to send all data\n/) {
+                    return;
+                } else {
+                    die $err;
+                }
+            }
+        } else {
+            return Plack::Util::inline_object
+                write => sub { $self->write_all($conn, $_[0], $timeout) },
+                close => sub { };
+        }
     }
-    return length $buf;
+
+    # returns 1 if socket is ready, undef on timeout
+    method do_timeout ($cb, $_timeout) {
+        local $SIG{ALRM} = sub {};
+        my $wait_until = time + $_timeout;
+        alarm($_timeout);
+        my $ret;
+        while (1) {
+            if ($ret = $cb->()) {
+                last;
+            } elsif (! (! defined($ret) && $! == EINTR)) {
+                undef $ret;
+                last;
+            }
+            # got EINTR
+            my $left = $wait_until - time;
+            last if $left <= 0;
+            alarm($left + $alarm_interval);
+        }
+        alarm(0);
+        $ret;
+    }
+
+    # returns (positive) number of bytes read, or undef if the socket is to be closed
+    method read_timeout ($sock, $buf, $len, $off, $_timeout) {
+        $self->do_timeout(sub { $sock->sysread($$buf, $len, $off) }, $_timeout);
+    }
+
+    # returns (positive) number of bytes written, or undef if the socket is to be closed
+    method write_timeout ($sock, $buf, $len, $off, $_timeout) {
+        $self->do_timeout(sub { $sock->syswrite($buf, $len, $off) }, $_timeout);
+    }
+
+    # writes all data in buf and returns number of bytes written or undef if failed
+    method write_all ($sock, $buf, $_timeout) {
+        return 0 unless defined $buf;
+        my $off = 0;
+        while (my $len = length($buf) - $off) {
+            my $ret = $self->write_timeout($sock, $buf, $len, $off, $_timeout)
+                or return;
+            $off += $ret;
+        }
+        return length $buf;
+    }
 }
 
 1;
