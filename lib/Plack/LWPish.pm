@@ -1,39 +1,43 @@
-package Plack::LWPish;
-use strict;
+package Plack;
+use v5.16;
 use warnings;
+use mop;
+
 use HTTP::Tiny;
 use HTTP::Response;
 use Hash::MultiValue;
 
-sub new {
-    my $class = shift;
-    my $self  = bless {}, $class;
-    $self->{http} = @_ == 1 ? $_[0] : HTTP::Tiny->new(@_);
-    $self;
-}
+class LWPish {
+    has $http;
 
-sub request {
-    my($self, $req) = @_;
+    method new {
+        $class->next::method(
+            http => @_ == 1 ? $_[0] : HTTP::Tiny->new(@_)
+        );
+    }
 
-    my @headers;
-    $req->headers->scan(sub { push @headers, @_ });
+    method request ($req) {
 
-    my $options = {
-        headers => Hash::MultiValue->new(@headers)->mixed,
-    };
-    $options->{content} = $req->content if defined $req->content && length($req->content);
+        my @headers;
+        $req->headers->scan(sub { push @headers, @_ });
 
-    my $response = $self->{http}->request($req->method, $req->url, $options);
+        my $options = {
+            headers => Hash::MultiValue->new(@headers)->mixed,
+        };
+        $options->{content} = $req->content if defined $req->content && length($req->content);
 
-    my $res = HTTP::Response->new(
-        $response->{status},
-        $response->{reason},
-        [ Hash::MultiValue->from_mixed($response->{headers})->flatten ],
-        $response->{content},
-    );
-    $res->request($req);
+        my $response = $http->request($req->method, $req->url, $options);
 
-    return $res;
+        my $res = HTTP::Response->new(
+            $response->{status},
+            $response->{reason},
+            [ Hash::MultiValue->from_mixed($response->{headers})->flatten ],
+            $response->{content},
+        );
+        $res->request($req);
+
+        return $res;
+    }
 }
 
 1;
