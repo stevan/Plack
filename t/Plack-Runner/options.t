@@ -4,7 +4,7 @@ use Plack::Runner;
 sub p {
     my $r = Plack::Runner->new;
     $r->parse_options(@_);
-    return {@{$r->{options}}};
+    return {@{$r->options}};
 }
 
 my %defaults = ( host => undef, port => 5000, listen => [ ':5000' ], socket => undef );
@@ -27,11 +27,11 @@ is_deeply p('-l', ':80', '--disable-foo', '--enable-bar'),
     my $r = Plack::Runner->new;
     $r->parse_options('-D', '--workers=50', '-E', 'development', 'foo.psgi', '--list=4000');
 
-    is $r->{env}, 'development';
-    is $r->{daemonize}, 1;
-    is_deeply $r->{argv}, [ 'foo.psgi' ];
+    is $r->env, 'development';
+    is $r->daemonize, 1;
+    is_deeply $r->argv, [ 'foo.psgi' ];
 
-    my $options = {@{$r->{options}}};
+    my $options = {@{$r->options}};
     is $options->{daemonize}, 1;
     is $options->{workers}, 50;
     is_deeply $options->{listen}, [ ':5000' ];
