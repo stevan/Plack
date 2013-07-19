@@ -1,6 +1,8 @@
-package Plack::Handler::CGI;
-use strict;
+package Plack::Handler;
+use v5.16;
 use warnings;
+use mop;
+
 use IO::Handle;
 
 # copied from HTTP::Status
@@ -59,112 +61,106 @@ my %StatusCode = (
     510 => 'Not Extended',                    # RFC 2774
 );
 
-sub new { bless {}, shift }
+class CGI extends Plack::Handler {
 
-sub run {
-    my ($self, $app) = @_;
+    method run ($app) {
 
-    my $env = $self->setup_env();
+        my $env = $self->setup_env();
 
-    my $res = $app->($env);
-    if (ref $res eq 'ARRAY') {
-        $self->_handle_response($res);
-    }
-    elsif (ref $res eq 'CODE') {
-        $res->(sub {
-            $self->_handle_response($_[0]);
-        });
-    }
-    else {
-        die "Bad response $res";
-    }
-}
-
-sub setup_env {
-    my ( $self, $override_env ) = @_;
-
-    $override_env ||= {};
-
-    binmode STDIN;
-    binmode STDERR;
-
-    my $env = {
-        %ENV,
-        'psgi.version'    => [ 1, 1 ],
-        'psgi.url_scheme' => ($ENV{HTTPS}||'off') =~ /^(?:on|1)$/i ? 'https' : 'http',
-        'psgi.input'      => *STDIN,
-        'psgi.errors'     => *STDERR,
-        'psgi.multithread'  => 0,
-        'psgi.multiprocess' => 1,
-        'psgi.run_once'     => 1,
-        'psgi.streaming'    => 1,
-        'psgi.nonblocking'  => 1,
-        %{ $override_env },
-    };
-
-    delete $env->{HTTP_CONTENT_TYPE};
-    delete $env->{HTTP_CONTENT_LENGTH};
-    $env->{'HTTP_COOKIE'} ||= $ENV{COOKIE}; # O'Reilly server bug
-
-    if (!exists $env->{PATH_INFO}) {
-        $env->{PATH_INFO} = '';
-    }
-
-    if ($env->{SCRIPT_NAME} eq '/') {
-        $env->{SCRIPT_NAME} = '';
-        $env->{PATH_INFO}   = '/' . $env->{PATH_INFO};
-    }
-
-    return $env;
-}
-
-
-
-sub _handle_response {
-    my ($self, $res) = @_;
-
-    *STDOUT->autoflush(1);
-    binmode STDOUT;
-
-    my $hdrs;
-    my $message = $StatusCode{$res->[0]};
-    $hdrs = "Status: $res->[0] $message\015\012";
-
-    my $headers = $res->[1];
-    while (my ($k, $v) = splice(@$headers, 0, 2)) {
-        $hdrs .= "$k: $v\015\012";
-    }
-    $hdrs .= "\015\012";
-
-    print STDOUT $hdrs;
-
-    my $body = $res->[2];
-    my $cb = sub { print STDOUT $_[0] };
-
-    # inline Plack::Util::foreach here
-    if (ref $body eq 'ARRAY') {
-        for my $line (@$body) {
-            $cb->($line) if length $line;
+        my $res = $app->($env);
+        if (ref $res eq 'ARRAY') {
+            $self->_handle_response($res);
+        }
+        elsif (ref $res eq 'CODE') {
+            $res->(sub {
+                $self->_handle_response($_[0]);
+            });
+        }
+        else {
+            die "Bad response $res";
         }
     }
-    elsif (defined $body) {
-        local $/ = \65536 unless ref $/;
-        while (defined(my $line = $body->getline)) {
-            $cb->($line) if length $line;
+
+    method setup_env ($override_env) {
+
+        $override_env ||= {};
+
+        binmode STDIN;
+        binmode STDERR;
+
+        my $env = {
+            %ENV,
+            'psgi.version'    => [ 1, 1 ],
+            'psgi.url_scheme' => ($ENV{HTTPS}||'off') =~ /^(?:on|1)$/i ? 'https' : 'http',
+            'psgi.input'      => *STDIN,
+            'psgi.errors'     => *STDERR,
+            'psgi.multithread'  => 0,
+            'psgi.multiprocess' => 1,
+            'psgi.run_once'     => 1,
+            'psgi.streaming'    => 1,
+            'psgi.nonblocking'  => 1,
+            %{ $override_env },
+        };
+
+        delete $env->{HTTP_CONTENT_TYPE};
+        delete $env->{HTTP_CONTENT_LENGTH};
+        $env->{'HTTP_COOKIE'} ||= $ENV{COOKIE}; # O'Reilly server bug
+
+        if (!exists $env->{PATH_INFO}) {
+            $env->{PATH_INFO} = '';
         }
-        $body->close;
+
+        if ($env->{SCRIPT_NAME} eq '/') {
+            $env->{SCRIPT_NAME} = '';
+            $env->{PATH_INFO}   = '/' . $env->{PATH_INFO};
+        }
+
+        return $env;
     }
-    else {
-        return Plack::Handler::CGI::Writer->new;
+
+    method _handle_response ($res) {
+
+        *STDOUT->autoflush(1);
+        binmode STDOUT;
+
+        my $hdrs;
+        my $message = $StatusCode{$res->[0]};
+        $hdrs = "Status: $res->[0] $message\015\012";
+
+        my $headers = $res->[1];
+        while (my ($k, $v) = splice(@$headers, 0, 2)) {
+            $hdrs .= "$k: $v\015\012";
+        }
+        $hdrs .= "\015\012";
+
+        print STDOUT $hdrs;
+
+        my $body = $res->[2];
+        my $cb = sub { print STDOUT $_[0] };
+
+        # inline Plack::Util::foreach here
+        if (ref $body eq 'ARRAY') {
+            for my $line (@$body) {
+                $cb->($line) if length $line;
+            }
+        }
+        elsif (defined $body) {
+            local $/ = \65536 unless ref $/;
+            while (defined(my $line = $body->getline)) {
+                $cb->($line) if length $line;
+            }
+            $body->close;
+        }
+        else {
+            return Plack::Handler::CGI::Writer->new;
+        }
     }
 }
 
-package Plack::Handler::CGI::Writer;
-sub new   { bless \do { my $x }, $_[0] }
-sub write { print STDOUT $_[1] }
-sub close { }
-
-package Plack::Handler::CGI;
+class CGI::Writer {
+    method write { print STDOUT $_[0] }
+    method close { }
+}
 
 1;
 __END__
