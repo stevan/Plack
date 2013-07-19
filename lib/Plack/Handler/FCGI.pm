@@ -1,6 +1,8 @@
-package Plack::Handler::FCGI;
-use strict;
+package Plack::Handler;
+use v5.16;
 use warnings;
+use mop;
+
 use constant RUNNING_IN_HELL => $^O eq 'MSWin32';
 
 use Scalar::Util qw(blessed);
@@ -10,195 +12,199 @@ use HTTP::Status qw(status_message);
 use URI;
 use URI::Escape;
 
-sub new {
-    my $class = shift;
-    my $self  = bless {@_}, $class;
+class FCGI extends Plack::Handler {
 
-    $self->{leave_umask} ||= 0;
-    $self->{keep_stderr} ||= 0;
-    $self->{nointr}      ||= 0;
-    $self->{daemonize}   ||= $self->{detach}; # compatibility
-    $self->{nproc}       ||= 1 unless blessed $self->{manager};
-    $self->{pid}         ||= $self->{pidfile}; # compatibility
-    $self->{listen}      ||= [ ":$self->{port}" ] if $self->{port}; # compatibility
-    $self->{backlog}     ||= 100;
-    $self->{manager}     = 'FCGI::ProcManager' unless exists $self->{manager};
+    has $leave_umask = 0;
+    has $keep_stderr = 0;
+    has $nointr      = 0;
+    has $backlog     = 100;
+    has $manager     = 'FCGI::ProcManager';
+    has $daemonize;
+    has $port;
+    has $nproc;
+    has $pid;
+    has $listen;
+    has $proc_title;
 
-    $self;
-}
+    has $stdin;
+    has $stdout;
+    has $stderr;
 
-sub run {
-    my ($self, $app) = @_;
-
-    my $sock = 0;
-    if (-S STDIN) {
-        # running from web server. Do nothing
-        # Note it should come before listen check because of plackup's default
-    } elsif ($self->{listen}) {
-        my $old_umask = umask;
-        unless ($self->{leave_umask}) {
-            umask(0);
-        }
-        $sock = FCGI::OpenSocket( $self->{listen}->[0], $self->{backlog} )
-            or die "failed to open FastCGI socket: $!";
-        unless ($self->{leave_umask}) {
-            umask($old_umask);
-        }
-    } elsif (!RUNNING_IN_HELL) {
-        die "STDIN is not a socket: specify a listen location";
+    submethod BUILD ($args) {
+        $daemonize = $args->{'detach'} if exists $args->{'detach'};
+        $nproc     = 1 unless blessed $manager;
+        $pid       = $args->{'pidfile'} if exists $args->{'pidfile'};
+        $listen    = [ ":$port" ] if $port;
     }
 
-    @{$self}{qw(stdin stdout stderr)} 
-      = (IO::Handle->new, IO::Handle->new, IO::Handle->new);
+    method run ($app) {
 
-    my %env;
-    my $request = FCGI::Request(
-        $self->{stdin}, $self->{stdout},
-        ($self->{keep_stderr} ? $self->{stdout} : $self->{stderr}), \%env, $sock,
-        ($self->{nointr} ? 0 : &FCGI::FAIL_ACCEPT_ON_INTR),
-    );
+        my $sock = 0;
+        if (-S STDIN) {
+            # running from web server. Do nothing
+            # Note it should come before listen check because of plackup's default
+        } elsif ($listen) {
+            my $old_umask = umask;
+            unless ($leave_umask) {
+                umask(0);
+            }
+            $sock = FCGI::OpenSocket( $listen->[0], $backlog )
+                or die "failed to open FastCGI socket: $!";
+            unless ($leave_umask) {
+                umask($old_umask);
+            }
+        } elsif (!RUNNING_IN_HELL) {
+            die "STDIN is not a socket: specify a listen location";
+        }
 
-    my $proc_manager;
+        ($stdin, $stdout, $stderr) = (IO::Handle->new, IO::Handle->new, IO::Handle->new);
 
-    if ($self->{listen}) {
-        $self->daemon_fork if $self->{daemonize};
+        my %env;
+        my $request = FCGI::Request(
+            $stdin, $stdout,
+            ($keep_stderr ? $stdout : $stderr), \%env, $sock,
+            ($nointr ? 0 : &FCGI::FAIL_ACCEPT_ON_INTR),
+        );
 
-        if ($self->{manager}) {
-            if (blessed $self->{manager}) {
-                for (qw(nproc pid proc_title)) {
-                    die "Don't use '$_' when passing in a 'manager' object"
-                        if $self->{$_};
+        my $proc_manager;
+
+        if ($listen) {
+            $self->daemon_fork if $daemonize;
+
+            if ($manager) {
+                if (blessed $manager) {
+                    for ($nproc, $pid, $proc_title) {
+                        die "Don't use '$_' when passing in a 'manager' object"
+                            if $_;
+                    }
+                    $proc_manager = $manager;
+                } else {
+                    Plack::Util::load_class($manager);
+                    $proc_manager = $manager->new({
+                        n_processes => $nproc,
+                        pid_fname   => $pid,
+                        ($proc_title ? (pm_title => $proc_title) : ()),
+                    });
                 }
-                $proc_manager = $self->{manager};
-            } else {
-                Plack::Util::load_class($self->{manager});
-                $proc_manager = $self->{manager}->new({
-                    n_processes => $self->{nproc},
-                    pid_fname   => $self->{pid},
-                    (exists $self->{proc_title}
-                         ? (pm_title => $self->{proc_title}) : ()),
-                });
+
+                # detach *before* the ProcManager inits
+                $self->daemon_detach if $daemonize;
+
+                $proc_manager->pm_manage;
+            }
+            elsif ($daemonize) {
+                $self->daemon_detach;
+            }
+        }
+
+        while ($request->Accept >= 0) {
+            $proc_manager && $proc_manager->pm_pre_dispatch;
+
+            my $env = {
+                %env,
+                'psgi.version'      => [1,1],
+                'psgi.url_scheme'   => ($env{HTTPS}||'off') =~ /^(?:on|1)$/i ? 'https' : 'http',
+                'psgi.input'        => $stdin,
+                'psgi.errors'       => $stderr, # FCGI.pm redirects STDERR in Accept() loop, so just print STDERR
+                                                # print to the correct error handle based on keep_stderr
+                'psgi.multithread'  => Plack::Util::FALSE,
+                'psgi.multiprocess' => Plack::Util::TRUE,
+                'psgi.run_once'     => Plack::Util::FALSE,
+                'psgi.streaming'    => Plack::Util::TRUE,
+                'psgi.nonblocking'  => Plack::Util::FALSE,
+                'psgix.harakiri'    => defined $proc_manager,
+            };
+
+            delete $env->{HTTP_CONTENT_TYPE};
+            delete $env->{HTTP_CONTENT_LENGTH};
+
+            # lighttpd munges multiple slashes in PATH_INFO into one. Try recovering it
+            my $uri = URI->new("http://localhost" .  $env->{REQUEST_URI});
+            $env->{PATH_INFO} = uri_unescape($uri->path);
+            $env->{PATH_INFO} =~ s/^\Q$env->{SCRIPT_NAME}\E//;
+
+            # root access for mod_fastcgi
+            if (!exists $env->{PATH_INFO}) {
+                $env->{PATH_INFO} = '';
             }
 
-            # detach *before* the ProcManager inits
-            $self->daemon_detach if $self->{daemonize};
+            # typical fastcgi_param from nginx might get empty values
+            for my $key (qw(CONTENT_TYPE CONTENT_LENGTH)) {
+                no warnings;
+                delete $env->{$key} if exists $env->{$key} && $env->{$key} eq '';
+            }
 
-            $proc_manager->pm_manage;
-        }
-        elsif ($self->{daemonize}) {
-            $self->daemon_detach;
+            if (defined(my $HTTP_AUTHORIZATION = $env->{Authorization})) {
+                $env->{HTTP_AUTHORIZATION} = $HTTP_AUTHORIZATION;
+            }
+
+            my $res = Plack::Util::run_app $app, $env;
+
+            if (ref $res eq 'ARRAY') {
+                $self->_handle_response($res);
+            }
+            elsif (ref $res eq 'CODE') {
+                $res->(sub {
+                    $self->_handle_response($_[0]);
+                });
+            }
+            else {
+                die "Bad response $res";
+            }
+
+            # give pm_post_dispatch the chance to do things after the client thinks
+            # the request is done
+            $request->Finish;
+
+            $proc_manager && $proc_manager->pm_post_dispatch();
+
+            if ($proc_manager && $env->{'psgix.harakiri.commit'}) {
+                $proc_manager->pm_exit("safe exit with harakiri");
+            }
         }
     }
 
-    while ($request->Accept >= 0) {
-        $proc_manager && $proc_manager->pm_pre_dispatch;
+    method _handle_response ($res) {
 
-        my $env = {
-            %env,
-            'psgi.version'      => [1,1],
-            'psgi.url_scheme'   => ($env{HTTPS}||'off') =~ /^(?:on|1)$/i ? 'https' : 'http',
-            'psgi.input'        => $self->{stdin},
-            'psgi.errors'       => $self->{stderr}, # FCGI.pm redirects STDERR in Accept() loop, so just print STDERR
-                                                    # print to the correct error handle based on keep_stderr
-            'psgi.multithread'  => Plack::Util::FALSE,
-            'psgi.multiprocess' => Plack::Util::TRUE,
-            'psgi.run_once'     => Plack::Util::FALSE,
-            'psgi.streaming'    => Plack::Util::TRUE,
-            'psgi.nonblocking'  => Plack::Util::FALSE,
-            'psgix.harakiri'    => defined $proc_manager,
-        };
+        $stdout->autoflush(1);
+        binmode $stdout;
 
-        delete $env->{HTTP_CONTENT_TYPE};
-        delete $env->{HTTP_CONTENT_LENGTH};
+        my $hdrs;
+        my $message = status_message($res->[0]);
+        $hdrs = "Status: $res->[0] $message\015\012";
 
-        # lighttpd munges multiple slashes in PATH_INFO into one. Try recovering it
-        my $uri = URI->new("http://localhost" .  $env->{REQUEST_URI});
-        $env->{PATH_INFO} = uri_unescape($uri->path);
-        $env->{PATH_INFO} =~ s/^\Q$env->{SCRIPT_NAME}\E//;
-
-        # root access for mod_fastcgi
-        if (!exists $env->{PATH_INFO}) {
-            $env->{PATH_INFO} = '';
+        my $headers = $res->[1];
+        while (my ($k, $v) = splice @$headers, 0, 2) {
+            $hdrs .= "$k: $v\015\012";
         }
+        $hdrs .= "\015\012";
 
-        # typical fastcgi_param from nginx might get empty values
-        for my $key (qw(CONTENT_TYPE CONTENT_LENGTH)) {
-            no warnings;
-            delete $env->{$key} if exists $env->{$key} && $env->{$key} eq '';
-        }
+        print { $stdout } $hdrs;
 
-        if (defined(my $HTTP_AUTHORIZATION = $env->{Authorization})) {
-            $env->{HTTP_AUTHORIZATION} = $HTTP_AUTHORIZATION;
-        }
-
-        my $res = Plack::Util::run_app $app, $env;
-
-        if (ref $res eq 'ARRAY') {
-            $self->_handle_response($res);
-        }
-        elsif (ref $res eq 'CODE') {
-            $res->(sub {
-                $self->_handle_response($_[0]);
-            });
+        my $cb = sub { print { $stdout } $_[0] };
+        my $body = $res->[2];
+        if (defined $body) {
+            Plack::Util::foreach($body, $cb);
         }
         else {
-            die "Bad response $res";
-        }
-
-        # give pm_post_dispatch the chance to do things after the client thinks
-        # the request is done
-        $request->Finish;
-
-        $proc_manager && $proc_manager->pm_post_dispatch();
-
-        if ($proc_manager && $env->{'psgix.harakiri.commit'}) {
-            $proc_manager->pm_exit("safe exit with harakiri");
+            return Plack::Util::inline_object
+                write => $cb,
+                close => sub { };
         }
     }
-}
 
-sub _handle_response {
-    my ($self, $res) = @_;
-
-    $self->{stdout}->autoflush(1);
-    binmode $self->{stdout};
-
-    my $hdrs;
-    my $message = status_message($res->[0]);
-    $hdrs = "Status: $res->[0] $message\015\012";
-
-    my $headers = $res->[1];
-    while (my ($k, $v) = splice @$headers, 0, 2) {
-        $hdrs .= "$k: $v\015\012";
+    method daemon_fork {
+        require POSIX;
+        fork && exit;
     }
-    $hdrs .= "\015\012";
 
-    print { $self->{stdout} } $hdrs;
-
-    my $cb = sub { print { $self->{stdout} } $_[0] };
-    my $body = $res->[2];
-    if (defined $body) {
-        Plack::Util::foreach($body, $cb);
+    method daemon_detach {
+        print "FastCGI daemon started (pid $$)\n";
+        open STDIN,  "+</dev/null" or die $!; ## no critic
+        open STDOUT, ">&STDIN"     or die $!;
+        open STDERR, ">&STDIN"     or die $!;
+        POSIX::setsid();
     }
-    else {
-        return Plack::Util::inline_object
-            write => $cb,
-            close => sub { };
-    }
-}
-
-sub daemon_fork {
-    require POSIX;
-    fork && exit;
-}
-
-sub daemon_detach {
-    my $self = shift;
-    print "FastCGI daemon started (pid $$)\n";
-    open STDIN,  "+</dev/null" or die $!; ## no critic
-    open STDOUT, ">&STDIN"     or die $!;
-    open STDERR, ">&STDIN"     or die $!;
-    POSIX::setsid();
 }
 
 1;
