@@ -1,36 +1,38 @@
-package Plack::Handler::HTTP::Server::Simple;
-use strict;
+package Plack::Handler::HTTP::Server;
+use v5.16;
+use warnings;
+use mop;
 
-sub new {
-    my($class, %args) = @_;
-    bless {%args}, $class;
+class Simple {
+
+    has $port;
+    has $host;
+    has $_server_ready;
+
+    method run ($app) {
+
+        my $server = Plack::Handler::HTTP::Server::Simple::PSGIServer->new($port);
+        $server->host($host) if $host;
+        $server->app($app);
+        $server->{_server_ready} = $_server_ready || sub {};
+
+        $server->run;
+    }
+
 }
 
-sub run {
-    my($self, $app) = @_;
+class Simple::PSGIServer extends HTTP::Server::Simple::PSGI {
 
-    my $server = Plack::Handler::HTTP::Server::Simple::PSGIServer->new($self->{port});
-    $server->host($self->{host}) if $self->{host};
-    $server->app($app);
-    $server->{_server_ready} = delete $self->{server_ready} || sub {};
+    method print_banner {
+        $self->{_server_ready}->({
+            host => $self->host,
+            port => $self->port,
+            server_software => 'HTTP::Server::Simple::PSGI',
+        });
+    }
 
-    $server->run;
 }
 
-package Plack::Handler::HTTP::Server::Simple::PSGIServer;
-use parent qw(HTTP::Server::Simple::PSGI);
-
-sub print_banner {
-    my $self = shift;
-
-    $self->{_server_ready}->({
-        host => $self->host,
-        port => $self->port,
-        server_software => 'HTTP::Server::Simple::PSGI',
-    });
-}
-
-package Plack::Handler::HTTP::Server::Simple;
 
 1;
 
