@@ -1,23 +1,9 @@
-package Plack::Handler::HTTP::Server::PSGI;
-use strict;
+package Plack::Handler::HTTP::Server;
+use v5.16;
+use warnings;
+use mop;
 
-# for temporary backward compat
-use parent qw( HTTP::Server::PSGI );
-
-sub new {
-    my($class, %args) = @_;
-    bless { %args }, $class;
-}
-
-sub run {
-    my($self, $app) = @_;
-    $self->_server->run($app);
-}
-
-sub _server {
-    my $self = shift;
-    HTTP::Server::PSGI->new(%$self);
-}
+class PSGI extends HTTP::Server::PSGI {}
 
 1;
 
