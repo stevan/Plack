@@ -15,7 +15,7 @@ class Lint extends Plack::Middleware is overload('inherited') {
             die("PSGI app should be a code reference: ", (defined $app ? $app : "undef"));
         }
 
-        $self->next::method($app);
+        $class->next::method($app);
     }
 
     method call ($env) {
