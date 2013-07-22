@@ -131,10 +131,10 @@ class Request {
         $headers;
     }
 
-    method content_encoding { $headers->content_encoding(@_) }
-    method header           { $headers->header(@_) }
-    method referer          { $headers->referer(@_) }
-    method user_agent       { $headers->user_agent(@_) }
+    method content_encoding { $self->headers->content_encoding(@_) }
+    method header           { $self->headers->header(@_) }
+    method referer          { $self->headers->referer(@_) }
+    method user_agent       { $self->headers->user_agent(@_) }
 
     method body_parameters {
 
