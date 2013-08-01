@@ -7,11 +7,19 @@ use Devel::StackTrace;
 use Devel::StackTrace::AsHTML;
 use Try::Tiny;
 
-our $StackTraceClass = "Devel::StackTrace";
+# NOTE:
+# this is not ideal, it should
+# really be not invading the
+# package namespace of the class
+# we are about to create, but
+# we can't mess up what is already
+# there.
+# - SL
+$Plack::Middleware::StackTrace::StackTraceClass = "Devel::StackTrace";
 
 # Optional since it needs PadWalker
 if (try { require Devel::StackTrace::WithLexicals; Devel::StackTrace::WithLexicals->VERSION(0.08); 1 }) {
-    $StackTraceClass = "Devel::StackTrace::WithLexicals";
+    $Plack::Middleware::StackTrace::StackTraceClass = "Devel::StackTrace::WithLexicals";
 }
 
 class StackTrace extends Plack::Middleware is overload('inherited') {
@@ -22,7 +30,7 @@ class StackTrace extends Plack::Middleware is overload('inherited') {
 
         my $trace;
         local $SIG{__DIE__} = sub {
-            $trace = $StackTraceClass->new(
+            $trace = $Plack::Middleware::StackTrace::StackTraceClass->new(
                 indent => 1, message => $self->munge_error($_[0], [ caller ]),
                 ignore_package => $class,
             );
@@ -34,9 +42,9 @@ class StackTrace extends Plack::Middleware is overload('inherited') {
             $self->app->($env);
         } catch {
             $caught = $_;
-            [ 500, 
-            [ "Content-Type", "text/plain; charset=utf-8" ], 
-            [ $self->no_trace_error($self->utf8_safe($caught)) ] 
+            [ 500,
+            [ "Content-Type", "text/plain; charset=utf-8" ],
+            [ $self->no_trace_error($self->utf8_safe($caught)) ]
             ];
         };
 

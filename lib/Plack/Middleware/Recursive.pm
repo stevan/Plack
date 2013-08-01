@@ -68,8 +68,8 @@ class Recursive extends Plack::Middleware is overload('inherited') {
 }
 
 # NOTE:
-# This is kind of annoying, it should 
-# be using the Middleware::Recursive 
+# This is kind of annoying, it should
+# be using the Middleware::Recursive
 # namespace in my opinion.
 # - SL
 package Plack::Recursive;
@@ -79,6 +79,8 @@ use mop;
 
 class ForwardRequest {
     has $path is ro;
+
+    method new ($path) { $class->next::method(path => $path) }
 
     method throw { die $class->new( @_ ) }
 
