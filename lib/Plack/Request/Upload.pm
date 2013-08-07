@@ -29,6 +29,16 @@ class Upload {
     }
 }
 
+# NOTE:
+# This has to be here because
+# otherwise this will pollute
+# the Plack::Request namespace
+# with a method 'method' that 
+# takes precedence in the method
+# dispatch.
+# - SL
+no mop;
+
 1;
 __END__
 
