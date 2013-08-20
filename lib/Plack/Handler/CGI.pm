@@ -157,7 +157,7 @@ class CGI extends Plack::Handler {
     }
 }
 
-class CGI::Writer {
+class Plack::Handler::CGI::Writer {
     method write { print STDOUT $_[0] }
     method close { }
 }

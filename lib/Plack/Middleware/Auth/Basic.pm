@@ -6,7 +6,7 @@ use mop;
 use Scalar::Util;
 use MIME::Base64;
 
-class Auth::Basic extends Plack::Middleware is overload('inherited') {
+class Plack::Middleware::Auth::Basic extends Plack::Middleware is overload('inherited') {
     has $realm         is rw; 
     has $authenticator is rw;
 
