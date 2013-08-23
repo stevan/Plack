@@ -21,7 +21,7 @@ class Simple {
 
 }
 
-class Simple::PSGIServer extends HTTP::Server::Simple::PSGI {
+class Plack::Handler::HTTP::Server::Simple::PSGIServer extends HTTP::Server::Simple::PSGI {
 
     method print_banner {
         $self->{_server_ready}->({
