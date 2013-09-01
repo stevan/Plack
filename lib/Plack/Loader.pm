@@ -9,7 +9,7 @@ use Try::Tiny;
 
 class Loader {
 
-    has $app;
+    has $!app;
 
     method watch {
         # do nothing. Override in subclass
@@ -51,7 +51,7 @@ class Loader {
     }
 
     method preload_app ($builder) {
-        $app = $builder->();
+        $!app = $builder->();
     }
 
     method guess {
@@ -78,7 +78,7 @@ class Loader {
     method env { \%ENV }
 
     method run ($server, $builder) {
-        $server->run( $app );
+        $server->run( $!app );
     }
 
 }

@@ -34,16 +34,16 @@ use constant MSWin32          => $^O eq 'MSWin32';
 
 class PSGI {
 
-    has $host            = 0;
-    has $port            = 8080;
-    has $timeout         = 300;
-    has $server_software = mop::get_meta($_)->name;
-    has $server_ready    = do { sub {} };
-    has $listen_sock;
-    has $ssl;
-    has $ipv6;
-    has $ssl_key_file;
-    has $ssl_cert_file;
+    has $!host            = 0;
+    has $!port            = 8080;
+    has $!timeout         = 300;
+    has $!server_software = ${^META}->name;
+    has $!server_ready    = do { sub {} };
+    has $!listen_sock;
+    has $!ssl;
+    has $!ipv6;
+    has $!ssl_key_file;
+    has $!ssl_cert_file;
 
     method run ($app) {
         $self->setup_listener();
@@ -52,20 +52,20 @@ class PSGI {
 
     method prepare_socket_class ($args) {
 
-        if ($ssl && $ipv6) {
+        if ($!ssl && $!ipv6) {
             Carp::croak("SSL and IPv6 are not supported at the same time (yet). Choose one.");
         }
 
-        if ($ssl) {
+        if ($!ssl) {
             eval { require IO::Socket::SSL; 1 }
                 or Carp::croak("SSL suport requires IO::Socket::SSL");
-            $args->{SSL_key_file}  = $ssl_key_file;
-            $args->{SSL_cert_file} = $ssl_cert_file;
+            $args->{SSL_key_file}  = $!ssl_key_file;
+            $args->{SSL_cert_file} = $!ssl_cert_file;
             return "IO::Socket::SSL";
-        } elsif ($ipv6) {
+        } elsif ($!ipv6) {
             eval { require IO::Socket::IP; 1 }
                 or Carp::croak("IPv6 support requires IO::Socket::IP");
-            $host ||= '::';
+            $!host ||= '::';
             $args->{LocalAddr} ||= '::';
             return "IO::Socket::IP";
         }
@@ -77,28 +77,28 @@ class PSGI {
 
         my %args = (
             Listen    => SOMAXCONN,
-            LocalPort => $port,
-            LocalAddr => $host,
+            LocalPort => $!port,
+            LocalAddr => $!host,
             Proto     => 'tcp',
             ReuseAddr => 1,
         );
 
         my $socket_class = $self->prepare_socket_class(\%args);
-        $listen_sock ||= $socket_class->new(%args)
-            or die "failed to listen to port $port: $!";
+        $!listen_sock ||= $socket_class->new(%args)
+            or die "failed to listen to port $!port: $!";
 
-        $server_ready->({ 
-            host            => $host,            
-            port            => $port,            
-            timeout         => $timeout,         
-            server_software => $server_software, 
-            server_ready    => $server_ready,    
-            listen_sock     => $listen_sock,
-            ssl             => $ssl,
-            ipv6            => $ipv6,
-            ssl_key_file    => $ssl_key_file,
-            ssl_cert_file   => $ssl_cert_file,
-            proto           => $ssl ? 'https' : 'http' 
+        $!server_ready->({
+            host            => $!host,
+            port            => $!port,
+            timeout         => $!timeout,
+            server_software => $!server_software,
+            server_ready    => $!server_ready,
+            listen_sock     => $!listen_sock,
+            ssl             => $!ssl,
+            ipv6            => $!ipv6,
+            ssl_key_file    => $!ssl_key_file,
+            ssl_cert_file   => $!ssl_cert_file,
+            proto           => $!ssl ? 'https' : 'http'
         });
     }
 
@@ -108,18 +108,18 @@ class PSGI {
 
         while (1) {
             local $SIG{PIPE} = 'IGNORE';
-            if (my $conn = $listen_sock->accept) {
+            if (my $conn = $!listen_sock->accept) {
                 $conn->setsockopt(IPPROTO_TCP, TCP_NODELAY, 1)
                     or die "setsockopt(TCP_NODELAY) failed:$!";
                 my $env = {
-                    SERVER_PORT => $port,
-                    SERVER_NAME => $host,
+                    SERVER_PORT => $!port,
+                    SERVER_NAME => $!host,
                     SCRIPT_NAME => '',
                     REMOTE_ADDR => $conn->peerhost,
                     REMOTE_PORT => $conn->peerport || 0,
                     'psgi.version' => [ 1, 1 ],
                     'psgi.errors'  => *STDERR,
-                    'psgi.url_scheme' => $ssl ? 'https' : 'http',
+                    'psgi.url_scheme' => $!ssl ? 'https' : 'http',
                     'psgi.run_once'     => Plack::Util::FALSE,
                     'psgi.multithread'  => Plack::Util::FALSE,
                     'psgi.multiprocess' => Plack::Util::FALSE,
@@ -145,7 +145,7 @@ class PSGI {
         while (1) {
             my $rlen = $self->read_timeout(
                 $conn, \$buf, MAX_REQUEST_SIZE - length($buf), length($buf),
-                $timeout,
+                $!timeout,
             ) or return;
             my $reqlen = parse_http_request($buf, $env);
             if ($reqlen >= 0) {
@@ -158,7 +158,7 @@ class PSGI {
                             $chunk = $buf;
                             $buf = '';
                         } else {
-                            $self->read_timeout($conn, \$chunk, $cl, 0, $timeout)
+                            $self->read_timeout($conn, \$chunk, $cl, 0, $!timeout)
                                 or return;
                         }
                         $buffer->print($chunk);
@@ -198,7 +198,7 @@ class PSGI {
 
         my @lines = (
             "Date: @{[HTTP::Date::time2str()]}\015\012",
-            "Server: $server_software\015\012",
+            "Server: $!server_software\015\012",
         );
 
         Plack::Util::header_iter($res->[1], sub {
@@ -209,7 +209,7 @@ class PSGI {
         unshift @lines, "HTTP/1.0 $res->[0] @{[ HTTP::Status::status_message($res->[0]) ]}\015\012";
         push @lines, "\015\012";
 
-        $self->write_all($conn, join('', @lines), $timeout)
+        $self->write_all($conn, join('', @lines), $!timeout)
             or return;
 
         if (defined $res->[2]) {
@@ -221,7 +221,7 @@ class PSGI {
                     Plack::Util::foreach(
                         $res->[2],
                         sub {
-                            $self->write_all($conn, $_[0], $timeout)
+                            $self->write_all($conn, $_[0], $!timeout)
                                 or die "failed to send all data\n";
                         },
                     );
@@ -238,7 +238,7 @@ class PSGI {
             }
         } else {
             return Plack::Util::inline_object
-                write => sub { $self->write_all($conn, $_[0], $timeout) },
+                write => sub { $self->write_all($conn, $_[0], $!timeout) },
                 close => sub { };
         }
     }

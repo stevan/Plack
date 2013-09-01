@@ -10,15 +10,15 @@ use Carp;
 use POSIX ":sys_wait_h";
 
 class WrapCGI extends Plack::Component is overload('inherited') {
-    has $script  is rw;
-    has $execute is rw;
-    has $_app    is rw;
+    has $!script  is rw;
+    has $!execute is rw;
+    has $!_app    is rw;
 
     method prepare_app {
-        $script or croak "'script' is not set";
-        $script = File::Spec->rel2abs($script);
+        $!script or croak "'script' is not set";
+        $!script = File::Spec->rel2abs($!script);
 
-        if ($execute) {
+        if ($!execute) {
             my $app = sub {
                 my $env = shift;
 
@@ -46,8 +46,8 @@ class WrapCGI extends Plack::Component is overload('inherited') {
                     open( STDIN, "<&=" . fileno($stdinr) )
                       or Carp::croak "Cannot dup STDIN: $!";
 
-                    chdir(File::Basename::dirname($script));
-                    exec($script) or Carp::croak("cannot exec: $!");
+                    chdir(File::Basename::dirname($!script));
+                    exec($!script) or Carp::croak("cannot exec: $!");
 
                     exit(2);
                 }
@@ -57,10 +57,10 @@ class WrapCGI extends Plack::Component is overload('inherited') {
 
                 {
                     # FIXME:
-                    # This is throwing a warning about 
+                    # This is throwing a warning about
                     # an uninitialized value in $fh
                     # then on reading from an unopened
-                    # filehandle, but I can't figure 
+                    # filehandle, but I can't figure
                     # out why. So punt for now.
                     # - SL
                     no warnings;
@@ -85,17 +85,17 @@ class WrapCGI extends Plack::Component is overload('inherited') {
                     Carp::croak("Error at run_on_shell CGI: $!");
                 }
             };
-            $_app = $app;
+            $!_app = $app;
         } else {
-            my $sub = CGI::Compile->compile($script);
+            my $sub = CGI::Compile->compile($!script);
             my $app = CGI::Emulate::PSGI->handler($sub);
 
-            $_app = $app;
+            $!_app = $app;
         }
     }
 
     method call ($env) {
-        $_app->($env);
+        $!_app->($env);
     }
 }
 

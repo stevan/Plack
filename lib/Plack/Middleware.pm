@@ -7,13 +7,13 @@ use Carp ();
 use Plack::Util;
 
 class Middleware extends Plack::Component is overload('inherited'), abstract {
-    has $app is rw;
+    has $!app is rw;
 
-    method wrap ($_app, @args) {
+    method wrap ($app, @args) {
         if (ref $self) {
-            $app = $_app;
+            $!app = $app;
         } else {
-            $self = $class->new({ app => $_app, @args });
+            $self = $class->new({ app => $app, @args });
         }
         return $self->to_app;
     }

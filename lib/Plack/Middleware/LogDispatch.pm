@@ -6,10 +6,10 @@ use mop;
 use Carp ();
 
 class LogDispatch extends Plack::Middleware is overload('inherited') {
-    has $logger is rw;
+    has $!logger is rw;
 
     method prepare_app {
-        unless ($logger) {
+        unless ($!logger) {
             Carp::croak "logger is not defined";
         }
     }
@@ -19,7 +19,7 @@ class LogDispatch extends Plack::Middleware is overload('inherited') {
         $env->{'psgix.logger'} = sub {
             my $args = shift;
             $args->{level} = 'critical' if $args->{level} eq 'fatal';
-            $logger->log(%$args);
+            $!logger->log(%$args);
         };
 
         $self->app->($env);

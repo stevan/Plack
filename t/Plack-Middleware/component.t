@@ -9,10 +9,10 @@ use Test::More;
 use Plack::Test;
 
 class MyComponent extends Plack::Component is overload('inherited') {
-    has $res is rw;
-    has $cb  is rw;
+    has $!res is rw;
+    has $!cb  is rw;
 
-    method call { $self->response_cb( $res, $cb ) }
+    method call { $self->response_cb( $!res, $!cb ) }
 }
 
 # Various kinds of PSGI responses.
@@ -42,7 +42,7 @@ for my $res ( generate_responses ) {
 
 for my $res ( generate_responses ) {
     my $app = MyComponent->new(
-        res => $res, 
+        res => $res,
         cb  => sub {
             my $done;
             sub {

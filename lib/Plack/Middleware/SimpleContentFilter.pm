@@ -6,7 +6,7 @@ use mop;
 use Plack::Util;
 
 class SimpleContentFilter extends Plack::Middleware is overload('inherited') {
-    has $filter is rw;
+    has $!filter is rw;
 
     method call ($env) {
 
@@ -20,7 +20,7 @@ class SimpleContentFilter extends Plack::Middleware is overload('inherited') {
                     my $chunk = shift;
                     return unless defined $chunk;
                     local $_ = $chunk;
-                    $filter->();
+                    $!filter->();
                     return $_;
                 };
             }

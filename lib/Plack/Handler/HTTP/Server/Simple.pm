@@ -5,16 +5,16 @@ use mop;
 
 class Simple {
 
-    has $port;
-    has $host;
-    has $_server_ready;
+    has $!port;
+    has $!host;
+    has $!_server_ready;
 
     method run ($app) {
 
-        my $server = Plack::Handler::HTTP::Server::Simple::PSGIServer->new($port);
-        $server->host($host) if $host;
+        my $server = Plack::Handler::HTTP::Server::Simple::PSGIServer->new($!port);
+        $server->host($!host) if $!host;
         $server->app($app);
-        $server->{_server_ready} = $_server_ready || sub {};
+        $server->{_server_ready} = $!_server_ready || sub {};
 
         $server->run;
     }

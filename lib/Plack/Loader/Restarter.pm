@@ -8,37 +8,37 @@ use Try::Tiny;
 
 class Restarter extends Plack::Loader {
 
-    has $watch = [];
-    has $builder;
-    has $pid;
+    has $!watch = [];
+    has $!builder;
+    has $!pid;
 
-    method preload_app ($_builder) {
-        $builder = $_builder;
+    method preload_app ($builder) {
+        $!builder = $builder;
     }
 
     method watch (@dir) {
-        push @$watch, @dir;
+        push @{$!watch}, @dir;
     }
 
     method _fork_and_start ($server) {
 
-        undef $pid; # re-init in case it's a restart
+        undef $!pid; # re-init in case it's a restart
 
-        my $_pid = fork;
-        die "Can't fork: $!" unless defined $_pid;
+        my $pid = fork;
+        die "Can't fork: $!" unless defined $pid;
 
-        if ($_pid == 0) { # child
-            return $server->run($builder->());
+        if ($pid == 0) { # child
+            return $server->run($!builder->());
         } else {
-            $pid = $_pid;
+            $!pid = $pid;
         }
     }
 
     method _kill_child {
-        $pid or return;
-        warn "Killing the existing server (pid:$pid)\n";
-        kill 'TERM' => $pid;
-        waitpid($pid, 0);
+        $!pid or return;
+        warn "Killing the existing server (pid:$!pid)\n";
+        kill 'TERM' => $!pid;
+        waitpid($!pid, 0);
     }
 
     method valid_file ($file) {
@@ -51,14 +51,14 @@ class Restarter extends Plack::Loader {
         $file->{path} !~ m!\.(?:git|svn)[/\\]|\.(?:bak|swp|swpx|swx)$|~$|_flymake\.p[lm]$|\.#!;
     }
 
-    method run ($server, $_builder) {
+    method run ($server, $builder) {
 
-        $self->_fork_and_start($server, $_builder);
-        return unless $pid;
+        $self->_fork_and_start($server, $builder);
+        return unless $!pid;
 
         require Filesys::Notify::Simple;
-        my $watcher = Filesys::Notify::Simple->new($watch);
-        warn "Watching @$watch for file updates.\n";
+        my $watcher = Filesys::Notify::Simple->new($!watch);
+        warn "Watching @{$!watch} for file updates.\n";
         local $SIG{TERM} = sub { $self->_kill_child; exit(0); };
 
         while (1) {
@@ -81,8 +81,8 @@ class Restarter extends Plack::Loader {
 
             $self->_kill_child;
             warn "Successfully killed! Restarting the new server process.\n";
-            $self->_fork_and_start($server, $_builder);
-            return unless $pid;
+            $self->_fork_and_start($server, $builder);
+            return unless $!pid;
         }
     }
 }

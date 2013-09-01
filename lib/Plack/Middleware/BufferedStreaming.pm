@@ -8,7 +8,7 @@ use Plack::Util;
 use Scalar::Util qw(weaken);
 
 class BufferedStreaming extends Plack::Middleware is overload('inherited') {
-    has $force is rw;
+    has $!force is rw;
 
     method call ($env) {
 
@@ -16,7 +16,7 @@ class BufferedStreaming extends Plack::Middleware is overload('inherited') {
         $env->{'psgi.streaming'} = Plack::Util::TRUE;
 
         my $res = $self->app->($env);
-        return $res if $caller_supports_streaming && !$force;
+        return $res if $caller_supports_streaming && !$!force;
 
         if ( ref($res) eq 'CODE' ) {
             my $ret;

@@ -11,14 +11,14 @@ my %formats = (
 );
 
 class AccessLog extends Plack::Middleware is overload('inherited') {
-    has $logger          is rw;
-    has $format          is rw;
-    has $compiled_format is rw;
+    has $!logger         is rw;
+    has $!format         is rw;
+    has $!compiled_format is rw;
 
     method prepare_app {
-        my $fmt = $format || "combined";
+        my $fmt = $!format || "combined";
         $fmt = $formats{$fmt} if exists $formats{$fmt};
-        $compiled_format = Apache::LogFormat::Compiler->new($fmt);
+        $!compiled_format = Apache::LogFormat::Compiler->new($fmt);
     }
 
     method call ($env) {
@@ -29,33 +29,33 @@ class AccessLog extends Plack::Middleware is overload('inherited') {
             my $content_length = Plack::Util::content_length($res->[2]);
             use Data::Dumper;
             my $log_line = $self->log_line($res->[0], $res->[1], $env, { content_length => $content_length });
-            if ( $logger ) {
-                $logger->($log_line);
+            if ( $!logger ) {
+                $!logger->($log_line);
             }
             else {
                 $env->{'psgi.errors'}->print($log_line);
-            }  
+            }
             return $res;
         }
 
         return $self->response_cb($res, sub {
             my $res = shift;
-            my $content_length = Plack::Util::content_length($res->[2]);           
+            my $content_length = Plack::Util::content_length($res->[2]);
             my $log_line = $self->log_line($res->[0], $res->[1], $env, { content_length => $content_length });
-            if ( $logger ) {
-                $logger->($log_line);
+            if ( $!logger ) {
+                $!logger->($log_line);
             }
             else {
                 $env->{'psgi.errors'}->print($log_line);
-            }  
+            }
         });
     }
 
     method log_line ($status, $headers, $env, $opts) {
         # NOTE:
-        # not sure why, but this cannot be 
+        # not sure why, but this cannot be
         # called as:
-        #    $compiled_format->log_line(...)
+        #    $!compiled_format->log_line(...)
         # it does some really weird stuff
         # if you do it.
         # - SL

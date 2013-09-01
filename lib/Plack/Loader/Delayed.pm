@@ -4,21 +4,21 @@ use warnings;
 use mop;
 
 class Delayed extends Plack::Loader {
-    has $builder;
+    has $!builder;
 
-    method preload_app ($_builder) {
-        $builder = $builder;
+    method preload_app ($builder) {
+        $!builder = $builder;
     }
 
     method run ($server) {
 
         my $compiled;
         my $app = sub {
-            $compiled ||= $builder->();
+            $compiled ||= $!builder->();
             $compiled->(@_);
         };
 
-        $server->{psgi_app_builder} = $builder;
+        $server->{psgi_app_builder} = $!builder;
         $server->run($app);
     }
 }

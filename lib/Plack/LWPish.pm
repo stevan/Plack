@@ -8,7 +8,7 @@ use HTTP::Response;
 use Hash::MultiValue;
 
 class LWPish {
-    has $http;
+    has $!http;
 
     method new {
         $class->next::method(
@@ -26,7 +26,7 @@ class LWPish {
         };
         $options->{content} = $req->content if defined $req->content && length($req->content);
 
-        my $response = $http->request($req->method, $req->url, $options);
+        my $response = $!http->request($req->method, $req->url, $options);
 
         my $res = HTTP::Response->new(
             $response->{status},

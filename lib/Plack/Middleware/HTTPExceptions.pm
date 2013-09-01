@@ -9,10 +9,10 @@ use Scalar::Util 'blessed';
 use HTTP::Status ();
 
 class HTTPExceptions extends Plack::Middleware is overload('inherited') {
-    has $rethrow is rw;
+    has $!rethrow is rw;
 
     method prepare_app {
-        $rethrow = 1 if ($ENV{PLACK_ENV} || '') eq 'development';
+        $!rethrow = 1 if ($ENV{PLACK_ENV} || '') eq 'development';
     }
 
     method call ($env) {

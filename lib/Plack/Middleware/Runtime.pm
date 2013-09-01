@@ -7,7 +7,7 @@ use Plack::Util;
 use Time::HiRes;
 
 class Runtime extends Plack::Middleware is overload('inherited') {
-    has $header_name is rw = 'X-Runtime';
+    has $!header_name is rw = 'X-Runtime';
 
     method call ($env) {
 
@@ -17,7 +17,7 @@ class Runtime extends Plack::Middleware is overload('inherited') {
         $self->response_cb($res, sub {
             my $res = shift;
             my $req_time = sprintf '%.6f', Time::HiRes::tv_interval($start);
-            Plack::Util::header_set($res->[1], $header_name, $req_time);
+            Plack::Util::header_set($res->[1], $!header_name, $req_time);
         });
     }
 }

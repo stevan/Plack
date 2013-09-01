@@ -14,27 +14,27 @@ use URI::Escape;
 
 class FCGI extends Plack::Handler {
 
-    has $leave_umask = 0;
-    has $keep_stderr = 0;
-    has $nointr      = 0;
-    has $backlog     = 100;
-    has $manager     = 'FCGI::ProcManager';
-    has $daemonize;
-    has $port;
-    has $nproc;
-    has $pid;
-    has $listen;
-    has $proc_title;
+    has $!leave_unmask = 0;
+    has $!keep_stderr = 0;
+    has $!nointr      = 0;
+    has $!backlog     = 100;
+    has $!manager     = 'FCGI::ProcManager';
+    has $!daemonize;
+    has $!port;
+    has $!nproc;
+    has $!pid;
+    has $!listen;
+    has $!proc_title;
 
-    has $stdin;
-    has $stdout;
-    has $stderr;
+    has $!stdin;
+    has $!stdout;
+    has $!stderr;
 
     submethod BUILD ($args) {
-        $daemonize = $args->{'detach'} if exists $args->{'detach'};
-        $nproc     = 1 unless blessed $manager;
-        $pid       = $args->{'pidfile'} if exists $args->{'pidfile'};
-        $listen    = [ ":$port" ] if $port;
+        $!daemonize = $args->{'detach'} if exists $args->{'detach'};
+        $!nproc     = 1 unless blessed $!manager;
+        $!pid       = $args->{'pidfile'} if exists $args->{'pidfile'};
+        $!listen    = [ ":$!port" ] if $!port;
     }
 
     method run ($app) {
@@ -43,56 +43,56 @@ class FCGI extends Plack::Handler {
         if (-S STDIN) {
             # running from web server. Do nothing
             # Note it should come before listen check because of plackup's default
-        } elsif ($listen) {
+        } elsif ($!listen) {
             my $old_umask = umask;
-            unless ($leave_umask) {
+            unless ($!leave_unmask) {
                 umask(0);
             }
-            $sock = FCGI::OpenSocket( $listen->[0], $backlog )
+            $sock = FCGI::OpenSocket( $!listen->[0], $!backlog )
                 or die "failed to open FastCGI socket: $!";
-            unless ($leave_umask) {
+            unless ($!leave_unmask) {
                 umask($old_umask);
             }
         } elsif (!RUNNING_IN_HELL) {
             die "STDIN is not a socket: specify a listen location";
         }
 
-        ($stdin, $stdout, $stderr) = (IO::Handle->new, IO::Handle->new, IO::Handle->new);
+        ($!stdin, $!stdout, $!stderr) = (IO::Handle->new, IO::Handle->new, IO::Handle->new);
 
         my %env;
         my $request = FCGI::Request(
-            $stdin, $stdout,
-            ($keep_stderr ? $stdout : $stderr), \%env, $sock,
-            ($nointr ? 0 : &FCGI::FAIL_ACCEPT_ON_INTR),
+            $!stdin, $!stdout,
+            ($!keep_stderr ? $!stdout : $!stderr), \%env, $sock,
+            ($!nointr ? 0 : &FCGI::FAIL_ACCEPT_ON_INTR),
         );
 
         my $proc_manager;
 
-        if ($listen) {
-            $self->daemon_fork if $daemonize;
+        if ($!listen) {
+            $self->daemon_fork if $!daemonize;
 
-            if ($manager) {
-                if (blessed $manager) {
-                    for ($nproc, $pid, $proc_title) {
+            if ($!manager) {
+                if (blessed $!manager) {
+                    for ($!nproc, $!pid, $!proc_title) {
                         die "Don't use '$_' when passing in a 'manager' object"
                             if $_;
                     }
-                    $proc_manager = $manager;
+                    $proc_manager = $!manager;
                 } else {
-                    Plack::Util::load_class($manager);
-                    $proc_manager = $manager->new({
-                        n_processes => $nproc,
-                        pid_fname   => $pid,
-                        ($proc_title ? (pm_title => $proc_title) : ()),
+                    Plack::Util::load_class($!manager);
+                    $proc_manager = $!manager->new({
+                        n_processes => $!nproc,
+                        pid_fname   => $!pid,
+                        ($!proc_title ? (pm_title => $!proc_title) : ()),
                     });
                 }
 
                 # detach *before* the ProcManager inits
-                $self->daemon_detach if $daemonize;
+                $self->daemon_detach if $!daemonize;
 
                 $proc_manager->pm_manage;
             }
-            elsif ($daemonize) {
+            elsif ($!daemonize) {
                 $self->daemon_detach;
             }
         }
@@ -104,8 +104,8 @@ class FCGI extends Plack::Handler {
                 %env,
                 'psgi.version'      => [1,1],
                 'psgi.url_scheme'   => ($env{HTTPS}||'off') =~ /^(?:on|1)$/i ? 'https' : 'http',
-                'psgi.input'        => $stdin,
-                'psgi.errors'       => $stderr, # FCGI.pm redirects STDERR in Accept() loop, so just print STDERR
+                'psgi.input'        => $!stdin,
+                'psgi.errors'       => $!stderr, # FCGI.pm redirects STDERR in Accept() loop, so just print STDERR
                                                 # print to the correct error handle based on keep_stderr
                 'psgi.multithread'  => Plack::Util::FALSE,
                 'psgi.multiprocess' => Plack::Util::TRUE,
@@ -166,8 +166,8 @@ class FCGI extends Plack::Handler {
 
     method _handle_response ($res) {
 
-        $stdout->autoflush(1);
-        binmode $stdout;
+        $!stdout->autoflush(1);
+        binmode $!stdout;
 
         my $hdrs;
         my $message = status_message($res->[0]);
@@ -179,9 +179,9 @@ class FCGI extends Plack::Handler {
         }
         $hdrs .= "\015\012";
 
-        print { $stdout } $hdrs;
+        print { $!stdout } $hdrs;
 
-        my $cb = sub { print { $stdout } $_[0] };
+        my $cb = sub { print { $!stdout } $_[0] };
         my $body = $res->[2];
         if (defined $body) {
             Plack::Util::foreach($body, $cb);
@@ -357,7 +357,7 @@ Now you can use plackup to listen to the socket that you've just configured in A
   $  plackup -s FCGI --listen /tmp/myapp.sock psgi/myapp.psgi
 
 The above describes the "standalone" method, which is usually appropriate.
-There are other methods, described in more detail at 
+There are other methods, described in more detail at
 L<Catalyst::Engine::FastCGI/Standalone_server_mode> (with regards to Catalyst, but which may be set up similarly for Plack).
 
 See also L<http://www.fastcgi.com/mod_fastcgi/docs/mod_fastcgi.html#FastCgiExternalServer>

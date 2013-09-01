@@ -6,15 +6,15 @@ use mop;
 use Scalar::Util;
 use MIME::Base64;
 
-class Plack::Middleware::Auth::Basic extends Plack::Middleware is overload('inherited') {
-    has $realm         is rw; 
-    has $authenticator is rw;
+class Auth::Basic extends Plack::Middleware is overload('inherited') {
+    has $!realm         is rw;
+    has $!authenticator is rw;
 
     method prepare_app {
 
-        my $auth = $authenticator or die 'authenticator is not set';
+        my $auth = $!authenticator or die 'authenticator is not set';
         if (Scalar::Util::blessed($auth) && $auth->can('authenticate')) {
-            $authenticator = sub { $auth->authenticate(@_[0,1]) }; # because Authen::Simple barfs on 3 params
+            $!authenticator = sub { $auth->authenticate(@_[0,1]) }; # because Authen::Simple barfs on 3 params
         } elsif (ref $auth ne 'CODE') {
             die 'authenticator should be a code reference or an object that responds to authenticate()';
         }
@@ -25,12 +25,12 @@ class Plack::Middleware::Auth::Basic extends Plack::Middleware is overload('inhe
         my $auth = $env->{HTTP_AUTHORIZATION}
             or return $self->unauthorized;
 
-        # note the 'i' on the regex, as, according to RFC2617 this is a 
+        # note the 'i' on the regex, as, according to RFC2617 this is a
         # "case-insensitive token to identify the authentication scheme"
         if ($auth =~ /^Basic (.*)$/i) {
             my($user, $pass) = split /:/, (MIME::Base64::decode($1) || ":"), 2;
             $pass = '' unless defined $pass;
-            if ($authenticator->($user, $pass, $env)) {
+            if ($!authenticator->($user, $pass, $env)) {
                 $env->{REMOTE_USER} = $user;
                 return $self->app->($env);
             }
@@ -45,7 +45,7 @@ class Plack::Middleware::Auth::Basic extends Plack::Middleware is overload('inhe
             401,
             [ 'Content-Type' => 'text/plain',
               'Content-Length' => length $body,
-              'WWW-Authenticate' => 'Basic realm="' . ($realm || "restricted area") . '"' ],
+              'WWW-Authenticate' => 'Basic realm="' . ($!realm || "restricted area") . '"' ],
             [ $body ],
         ];
     }

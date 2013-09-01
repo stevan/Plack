@@ -11,19 +11,19 @@ use HTTP::Date;
 
 class File extends Plack::Component is overload('inherited') {
 
-    has $root         is rw;
-    has $file         is rw; 
-    has $content_type is rw; 
-    has $encoding     is rw;
+    has $!root         is rw;
+    has $!file         is rw;
+    has $!content_type is rw;
+    has $!encoding     is rw;
 
-    method should_handle ($_file) {
-        return -f $_file;
+    method should_handle ($file) {
+        return -f $file;
     }
 
     method call ($env) {
 
-        my ($_file, $path_info) = $self->file || $self->locate_file($env);
-        return $_file if ref $_file eq 'ARRAY';
+        my ($file, $path_info) = $self->file || $self->locate_file($env);
+        return $file if ref $file eq 'ARRAY';
 
         if ($path_info) {
             $env->{'plack.file.SCRIPT_NAME'} = $env->{SCRIPT_NAME} . $env->{PATH_INFO};
@@ -34,7 +34,7 @@ class File extends Plack::Component is overload('inherited') {
             $env->{'plack.file.PATH_INFO'}   = '';
         }
 
-        return $self->serve_path($env, $_file);
+        return $self->serve_path($env, $file);
     }
 
     method locate_file ($env) {
@@ -57,11 +57,11 @@ class File extends Plack::Component is overload('inherited') {
             return $self->return_403;
         }
 
-        my($_file, @path_info);
+        my($file, @path_info);
         while (@path) {
             my $try = File::Spec::Unix->catfile($docroot, @path);
             if ($self->should_handle($try)) {
-                $_file = $try;
+                $file = $try;
                 last;
             } elsif (!$self->allow_path_info) {
                 last;
@@ -69,43 +69,43 @@ class File extends Plack::Component is overload('inherited') {
             unshift @path_info, pop @path;
         }
 
-        if (!$_file) {
+        if (!$file) {
             return $self->return_404;
         }
 
-        if (!-r $_file) {
+        if (!-r $file) {
             return $self->return_403;
         }
 
-        return $_file, join("/", "", @path_info);
+        return $file, join("/", "", @path_info);
     }
 
     method allow_path_info { 0 }
 
-    method serve_path ($env, $_file) {
+    method serve_path ($env, $file) {
 
-        my $_content_type = $self->content_type || Plack::MIME->mime_type($_file)
+        my $content_type = $self->content_type || Plack::MIME->mime_type($file)
                            || 'text/plain';
 
-        if ("CODE" eq ref $_content_type) {
-    		$_content_type = $_content_type->($_file);
+        if ("CODE" eq ref $content_type) {
+    		$content_type = $content_type->($file);
         }
 
-        if ($_content_type =~ m!^text/!) {
-            $_content_type .= "; charset=" . ($self->encoding || "utf-8");
+        if ($content_type =~ m!^text/!) {
+            $content_type .= "; charset=" . ($self->encoding || "utf-8");
         }
 
-        open my $fh, "<:raw", $_file
+        open my $fh, "<:raw", $file
             or return $self->return_403;
 
-        my @stat = stat $_file;
+        my @stat = stat $file;
 
-        Plack::Util::set_io_path($fh, Cwd::realpath($_file));
+        Plack::Util::set_io_path($fh, Cwd::realpath($file));
 
         return [
             200,
             [
-                'Content-Type'   => $_content_type,
+                'Content-Type'   => $content_type,
                 'Content-Length' => $stat[7],
                 'Last-Modified'  => HTTP::Date::time2str( $stat[9] )
             ],
@@ -177,7 +177,7 @@ Set the file encoding for text files. Defaults to C<utf-8>.
 
 Set the file content type. If not set L<Plack::MIME> will try to detect it
 based on the file extension or fall back to C<text/plain>.
-Can be set to a callback which should work on $_[0] to check full path file 
+Can be set to a callback which should work on $_[0] to check full path file
 name.
 
 =back

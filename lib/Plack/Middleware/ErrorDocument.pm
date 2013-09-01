@@ -10,12 +10,12 @@ use HTTP::Status qw(is_error);
 
 class ErrorDocument extends Plack::Middleware is overload('inherited') {
 
-    has $subrequest is rw;
-    has $status     is rw = {};
+    has $!subrequest is rw;
+    has $!status     is rw = {};
 
     submethod BUILD ($args) {
-        $status->{'500'} = $args->{'500'} if exists $args->{'500'};
-        $status->{'404'} = $args->{'404'} if exists $args->{'404'};
+        $!status->{'500'} = $args->{'500'} if exists $args->{'500'};
+        $!status->{'404'} = $args->{'404'} if exists $args->{'404'};
     }
 
     method call ($env) {
@@ -24,12 +24,12 @@ class ErrorDocument extends Plack::Middleware is overload('inherited') {
 
         $self->response_cb($r, sub {
             my $r = shift;
-            unless (is_error($r->[0]) && exists $status->{$r->[0]}) {
+            unless (is_error($r->[0]) && exists $!status->{$r->[0]}) {
                 return;
             }
 
-            my $path = $status->{$r->[0]};
-            if ($subrequest) {
+            my $path = $!status->{$r->[0]};
+            if ($!subrequest) {
                 for my $key (keys %$env) {
                     unless ($key =~ /^psgi/) {
                         $env->{'psgix.errordocument.' . $key} = $env->{$key};

@@ -6,18 +6,18 @@ use mop;
 use Carp ();
 
 class Log4perl extends Plack::Middleware is overload('inherited') {
-    has $category is rw; 
-    has $logger   is rw; 
-    has $conf     is rw;
+    has $!category is rw;
+    has $!logger   is rw;
+    has $!conf     is rw;
 
     method prepare_app {
 
-        if ($conf) {
+        if ($!conf) {
             require Log::Log4perl;
-            Log::Log4perl::init($conf);
+            Log::Log4perl::init($!conf);
         }
 
-        $logger = Log::Log4perl->get_logger($category || '');
+        $!logger = Log::Log4perl->get_logger($!category || '');
     }
 
     method call ($env) {
@@ -27,7 +27,7 @@ class Log4perl extends Plack::Middleware is overload('inherited') {
             my $level = $args->{level};
             local $Log::Log4perl::caller_depth
                 = $Log::Log4perl::caller_depth + 1;
-            $logger->$level($args->{message});
+            $!logger->$level($args->{message});
         };
 
         $self->app->($env);

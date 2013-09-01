@@ -7,7 +7,7 @@ use Plack::Util;
 
 class PSGIBin extends Plack::App::File is overload('inherited') {
 
-    has $_compiled = {};
+    has $!_compiled = {};
 
     method allow_path_info { 1 }
 
@@ -15,7 +15,7 @@ class PSGIBin extends Plack::App::File is overload('inherited') {
 
         local @{$env}{qw(SCRIPT_NAME PATH_INFO)} = @{$env}{qw( plack.file.SCRIPT_NAME plack.file.PATH_INFO )};
 
-        my $app = $_compiled->{$file} ||= Plack::Util::load_psgi($file);
+        my $app = $!_compiled->{$file} ||= Plack::Util::load_psgi($file);
         $app->($env);
     }
 }

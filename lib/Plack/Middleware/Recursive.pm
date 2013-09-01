@@ -78,14 +78,14 @@ use warnings;
 use mop;
 
 class ForwardRequest {
-    has $path is ro;
+    has $!path is ro;
 
     method new ($path) { $class->next::method(path => $path) }
 
     method throw { die $class->new( @_ ) }
 
     method as_string is overload('""') {
-        return "Forwarding to $self->{path}: Your application should be wrapped with Plack::Middleware::Recursive.";
+        return "Forwarding to $!path : Your application should be wrapped with Plack::Middleware::Recursive.";
     }
 }
 

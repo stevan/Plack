@@ -4,16 +4,16 @@ use warnings;
 use mop;
 
 class Conditional extends Plack::Middleware is overload('inherited') {
-    has $condition  is rw; 
-    has $middleware is rw;
-    has $builder    is rw;
+    has $!condition  is rw;
+    has $!middleware is rw;
+    has $!builder    is rw;
 
     method prepare_app {
-        $self->middleware( $builder->($self->app) );
+        $self->middleware( $!builder->($self->app) );
     }
 
     method call ($env) {
-        my $app = $self->condition->($env) ? $middleware : $self->app;
+        my $app = $self->condition->($env) ? $!middleware : $self->app;
         return $app->($env);
     }
 }

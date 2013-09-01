@@ -7,11 +7,11 @@ use Plack::Util;
 use URI::Escape ();
 
 class JSONP extends Plack::Middleware is overload('inherited') {
-    has $callback_key is rw;
+    has $!callback_key is rw;
 
     method prepare_app {
-        unless (defined $callback_key) {
-            $callback_key = 'callback';
+        unless (defined $!callback_key) {
+            $!callback_key = 'callback';
         }
     }
 
@@ -22,7 +22,7 @@ class JSONP extends Plack::Middleware is overload('inherited') {
             if (defined $res->[2]) {
                 my $h = Plack::Util::headers($res->[1]);
                 if ($h->get('Content-Type') =~ m!/(?:json|javascript)! &&
-                    $env->{QUERY_STRING} =~ /(?:^|&)$callback_key=([^&]+)/) {
+                    $env->{QUERY_STRING} =~ /(?:^|&)$!callback_key=([^&]+)/) {
                     my $cb = URI::Escape::uri_unescape($1);
                     if ($cb =~ /^[\w\.\[\]]+$/) {
                         my $body;

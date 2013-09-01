@@ -7,8 +7,8 @@ use Plack::Util;
 use Scalar::Util;
 
 class XSendfile extends Plack::Middleware is overload('inherited') {
-    has $variation is rw;
-    
+    has $!variation is rw;
+
     method call ($env) {
 
         my $res = $self->app->($env);
@@ -51,7 +51,7 @@ class XSendfile extends Plack::Middleware is overload('inherited') {
     }
 
     method _variation ($env) {
-        $variation || $env->{'plack.xsendfile.type'} || $env->{HTTP_X_SENDFILE_TYPE};
+        $!variation || $env->{'plack.xsendfile.type'} || $env->{HTTP_X_SENDFILE_TYPE};
     }
 }
 

@@ -10,33 +10,33 @@ use Try::Tiny;
 class Runner {
 
     # these all seem to be used internally
-    has $app;
-    has $server;
-    has $eval;
-    has $access_log;
-    has $path;
-    has $help;
-    has $version;
-    has $watch;
-    has $version_cb;
+    has $!app;
+    has $!server;
+    has $!eval;
+    has $!access_log;
+    has $!path;
+    has $!help;
+    has $!version;
+    has $!watch;
+    has $!version_cb;
 
     # the tests asked to see these ...
-    has $daemonize          is ro;
-    has $options            is ro;
-    has $argv               is ro;
-    has $env                is ro = $ENV{PLACK_ENV};
+    has $!daemonize          is ro;
+    has $!options            is ro;
+    has $!argv               is ro;
+    has $!env                is ro = $ENV{PLACK_ENV};
 
-    # these seem to have defaults 
-    has $loader             = 'Plack::Loader';
-    has $_loader; ## << this just stores the loader instance
-    has $includes           = [];
-    has $modules            = [];
-    has $default_middleware = 1;
+    # these seem to have defaults
+    has $!loader             = 'Plack::Loader';
+    has $!_loader; ## << this just stores the loader instance
+    has $!includes           = [];
+    has $!modules            = [];
+    has $!default_middleware = 1;
 
     # delay the build process for reloader
-    method build ($block, $_app) {
-        $_app ||= sub { };
-        return sub { $block->($_app->()) };
+    method build ($block, $app) {
+        $app ||= sub { };
+        return sub { $block->($app->()) };
     }
 
     method parse_options {
@@ -53,25 +53,25 @@ class Runner {
         );
 
         $parser->getoptions(
-            "a|app=s"      => \$app,
+            "a|app=s"      => \$!app,
             "o|host=s"     => \$host,
             "p|port=i"     => \$port,
-            "s|server=s"   => \$server,
+            "s|server=s"   => \$!server,
             "S|socket=s"   => \$socket,
             'l|listen=s@'  => \@listen,
-            'D|daemonize'  => \$daemonize,
-            "E|env=s"      => \$env,
-            "e=s"          => \$eval,
-            'I=s@'         => $includes,
-            'M=s@'         => $modules,
-            'r|reload'     => sub { $loader = "Restarter" },
-            'R|Reload=s'   => sub { $loader = "Restarter"; $self->loader->watch(split ",", $_[1]) },
-            'L|loader=s'   => \$loader,
-            "access-log=s" => \$access_log,
-            "path=s"       => \$path,
-            "h|help"       => \$help,
-            "v|version"    => \$version,
-            "default-middleware!" => \$default_middleware,
+            'D|daemonize'  => \$!daemonize,
+            "E|env=s"      => \$!env,
+            "e=s"          => \$!eval,
+            'I=s@'         => $!includes,
+            'M=s@'         => $!modules,
+            'r|reload'     => sub { $!loader = "Restarter" },
+            'R|Reload=s'   => sub { $!loader = "Restarter"; $self->loader->watch(split ",", $_[1]) },
+            'L|loader=s'   => \$!loader,
+            "access-log=s" => \$!access_log,
+            "path=s"       => \$!path,
+            "h|help"       => \$!help,
+            "v|version"    => \$!version,
+            "default-middleware!" => \$!default_middleware,
         );
 
         my(@options, @argv);
@@ -92,14 +92,14 @@ class Runner {
         }
 
         push @options, $self->mangle_host_port_socket($host, $port, $socket, @listen);
-        push @options, daemonize => 1 if $daemonize;
+        push @options, daemonize => 1 if $!daemonize;
 
-        $options = \@options;
-        $argv    = \@argv;
+        $!options = \@options;
+        $!argv    = \@argv;
     }
 
     method set_options {
-        push @$options, @_;
+        push @{$!options}, @_;
     }
 
     method mangle_host_port_socket ($host, $port, $socket, @listen) {
@@ -126,7 +126,7 @@ class Runner {
     }
 
     method version_cb {
-        $version_cb || sub {
+        $!version_cb || sub {
             require Plack;
             print "Plack $Plack::VERSION\n";
         };
@@ -134,26 +134,26 @@ class Runner {
 
     method setup {
 
-        if ($help) {
+        if ($!help) {
             require Pod::Usage;
             Pod::Usage::pod2usage(0);
         }
 
-        if ($version) {
+        if ($!version) {
             $self->version_cb->();
             exit;
         }
 
-        if (@$includes) {
+        if (@{$!includes}) {
             require lib;
-            lib->import(@$includes);
+            lib->import(@{$!includes});
         }
 
-        if ($eval) {
-            push @$modules, 'Plack::Builder';
+        if ($!eval) {
+            push @{$!modules}, 'Plack::Builder';
         }
 
-        for (@$modules) {
+        for (@{$!modules}) {
             my($module, @import) = split /[=,]/;
             eval "require $module" or die $@;
             $module->import(@import);
@@ -162,18 +162,18 @@ class Runner {
 
     method locate_app (@args) {
 
-        my $psgi = $app || $args[0];
+        my $psgi = $!app || $args[0];
 
         if (ref $psgi eq 'CODE') {
             return sub { $psgi };
         }
 
-        if ($eval) {
+        if ($!eval) {
             $self->loader->watch("lib");
             return build {
                 no strict;
                 no warnings;
-                my $eval = "builder { $eval;";
+                my $eval = "builder { $!eval;";
                 $eval .= "Plack::Util::load_psgi(\$psgi);" if $psgi;
                 $eval .= "}";
                 eval $eval or die $@;
@@ -188,8 +188,8 @@ class Runner {
     }
 
     method watch (@dir) {
-        push @$watch, @dir
-            if $loader eq 'Restarter';
+        push @{$!watch}, @dir
+            if $!loader eq 'Restarter';
     }
 
     method apply_middleware ($_app, $_class, @args) {
@@ -199,17 +199,17 @@ class Runner {
 
     method prepare_devel ($_app) {
 
-        if ($default_middleware) {
+        if ($!default_middleware) {
             $_app = $self->apply_middleware($_app, 'Lint');
             $_app = $self->apply_middleware($_app, 'StackTrace');
-            if (!$ENV{GATEWAY_INTERFACE} and !$access_log) {
+            if (!$ENV{GATEWAY_INTERFACE} and !$!access_log) {
                 $_app = $self->apply_middleware($_app, 'AccessLog');
             }
         }
 
-        push @$options, server_ready => sub {
+        push @{$!options}, server_ready => sub {
             my($args) = @_;
-            my $name  = $args->{server_software} || ref($args); # $args is $server
+            my $name  = $args->{server_software} || ref($args); # $args is $!server
             my $host  = $args->{host} || 0;
             my $proto = $args->{proto} || 'http';
             print STDERR "$name: Accepting connections at $proto://$host:$args->{port}/\n";
@@ -219,14 +219,14 @@ class Runner {
     }
 
     method loader {
-        $_loader ||= Plack::Util::load_class($loader, 'Plack::Loader')->new;
+        $!_loader ||= Plack::Util::load_class($!loader, 'Plack::Loader')->new;
     }
 
     method load_server ($__loader) {
-        if ($server) {
-            return $__loader->load($server, @$options);
+        if ($!server) {
+            return $__loader->load($!server, @{$!options});
         } else {
-            return $__loader->auto(@$options);
+            return $__loader->auto(@{$!options});
         }
     }
 
@@ -238,33 +238,33 @@ class Runner {
             return $self->run;
         }
 
-        unless ($options) {
+        unless ($!options) {
             $self->parse_options();
         }
 
-        my @args = @_ ? @_ : @$argv;
+        my @args = @_ ? @_ : @{$!argv};
 
         $self->setup;
 
         my $_app = $self->locate_app(@args);
 
-        if ($path) {
+        if ($!path) {
             require Plack::App::URLMap;
             $_app = build {
                 my $urlmap = Plack::App::URLMap->new;
-                $urlmap->mount($path => $_[0]);
+                $urlmap->mount($!path => $_[0]);
                 $urlmap->to_app;
             } $_app;
         }
 
-        $ENV{PLACK_ENV} ||= $env || 'development';
+        $ENV{PLACK_ENV} ||= $!env || 'development';
         if ($ENV{PLACK_ENV} eq 'development') {
             $_app = $self->prepare_devel($_app);
         }
 
-        if ($access_log) {
-            open my $logfh, ">>", $access_log
-                or die "open($access_log): $!";
+        if ($!access_log) {
+            open my $logfh, ">>", $!access_log
+                or die "open($!access_log): $!";
             $logfh->autoflush(1);
             $_app = $self->apply_middleware($_app, 'AccessLog', logger => sub { $logfh->print( @_ ) });
         }

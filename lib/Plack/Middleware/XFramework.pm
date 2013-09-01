@@ -6,14 +6,14 @@ use mop;
 use Plack::Util;
 
 class XFramework extends Plack::Middleware is overload('inherited') {
-    has $framework is rw;
-    
+    has $!framework is rw;
+
     method call ($env) {
         my $res = $self->app->( $env );
         $self->response_cb($res, sub {
             my $res = shift;
             if ($self->framework) {
-                Plack::Util::header_set $res->[1], 'X-Framework' => $framework;
+                Plack::Util::header_set $res->[1], 'X-Framework' => $!framework;
             }
         });
     }

@@ -19,10 +19,10 @@ DIE
 
 class Shotgun extends Plack::Loader {
 
-    has $builder;
+    has $!builder;
 
-    method preload_app ($_builder) {
-        $builder = sub { Plack::Middleware::BufferedStreaming->wrap( $_builder->() ) };
+    method preload_app ($builder) {
+        $!builder = sub { Plack::Middleware::BufferedStreaming->wrap( $builder->() ) };
     }
 
     method run ($server) {
@@ -48,7 +48,7 @@ class Shotgun extends Plack::Loader {
                 my $res;
                 try {
                     $env->{'psgi.streaming'} = 0;
-                    $res = $builder->()->($env);
+                    $res = $!builder->()->($env);
                     my @body;
                     Plack::Util::foreach($res->[2], sub { push @body, $_[0] });
                     $res->[2] = \@body;

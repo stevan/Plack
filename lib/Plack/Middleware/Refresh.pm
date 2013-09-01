@@ -6,21 +6,21 @@ use mop;
 use Module::Refresh;
 
 class Refresh extends Plack::Middleware is overload('inherited') {
-    has $last     is rw; 
-    has $cooldown is rw;
+    has $!last     is rw;
+    has $!cooldown is rw;
 
     method prepare_app {
-        $cooldown = 10 unless defined $cooldown;
+        $!cooldown = 10 unless defined $!cooldown;
 
         Module::Refresh->new;
-        $last = time - $cooldown;
+        $!last = time - $!cooldown;
     }
 
     method call ($env) {
 
-        if (time > $last + $cooldown) {
+        if (time > $!last + $!cooldown) {
             Module::Refresh->refresh;
-            $last = time;
+            $!last = time;
         }
 
         $self->app->($env);

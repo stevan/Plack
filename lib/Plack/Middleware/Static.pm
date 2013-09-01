@@ -6,17 +6,17 @@ use mop;
 use Plack::App::File;
 
 class Static extends Plack::Middleware is overload('inherited') {
-    has $path         is rw; 
-    has $root         is rw; 
-    has $encoding     is rw; 
-    has $pass_through is rw; 
-    has $content_type is rw;
-    has $file         is rw;
+    has $!path        is rw;
+    has $!root         is rw;
+    has $!encoding     is rw;
+    has $!pass_through is rw;
+    has $!content_type is rw;
+    has $!file         is rw;
 
     method call ($env) {
 
         my $res = $self->_handle_static($env);
-        if ($res && not ($pass_through and $res->[0] == 404)) {
+        if ($res && not ($!pass_through and $res->[0] == 404)) {
             return $res;
         }
 
@@ -25,21 +25,21 @@ class Static extends Plack::Middleware is overload('inherited') {
 
     submethod _handle_static ($env) {
 
-        my $path_match = $path or return;
-        my $_path = $env->{PATH_INFO};
+        my $path_match = $!path or return;
+        my $path = $env->{PATH_INFO};
 
-        for ($_path) {
+        for ($path) {
             my $matched = 'CODE' eq ref $path_match ? $path_match->($_, $env) : $_ =~ $path_match;
             return unless $matched;
         }
 
-        $file ||= Plack::App::File->new({ 
-            root         => $root || '.', 
-            encoding     => $encoding, 
-            content_type => $content_type 
+        $!file ||= Plack::App::File->new({
+            root         => $!root || '.',
+            encoding     => $!encoding,
+            content_type => $!content_type
         });
-        local $env->{PATH_INFO} = $_path; # rewrite PATH
-        return $file->call($env);
+        local $env->{PATH_INFO} = $path; # rewrite PATH
+        return $!file->call($env);
     }
 }
 
@@ -126,9 +126,9 @@ the request on to the application it is wrapping.
 
 =item content_type
 
-The C<content_type> option can be used to provide access to a different MIME 
+The C<content_type> option can be used to provide access to a different MIME
 database than L<Plack::MIME>.
-L<Plack::MIME> works fast and good for a list of well known file endings, 
+L<Plack::MIME> works fast and good for a list of well known file endings,
 but if you need a more accurate content based checking you can use modules
 like L<File::MimeInfo> or L<File::MMagic> for example.
 The callback should work on $_[0] which is the filename of the file.

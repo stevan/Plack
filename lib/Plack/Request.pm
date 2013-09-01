@@ -15,50 +15,50 @@ use URI         ();
 use URI::Escape ();
 
 class Request {
-    has $env is ro;
+    has $!env is ro;
 
-    has $headers;
+    has $!headers;
 
     method new ($e) {
         $class->next::method( env => $e )
     }
 
-    method address     { $env->{REMOTE_ADDR} }
-    method remote_host { $env->{REMOTE_HOST} }
-    method protocol    { $env->{SERVER_PROTOCOL} }
-    method method      { $env->{REQUEST_METHOD} }
-    method port        { $env->{SERVER_PORT} }
-    method user        { $env->{REMOTE_USER} }
-    method request_uri { $env->{REQUEST_URI} }
-    method path_info   { $env->{PATH_INFO} }
-    method path        { $env->{PATH_INFO} || '/' }
-    method script_name { $env->{SCRIPT_NAME} }
-    method scheme      { $env->{'psgi.url_scheme'} }
+    method address     { $!env->{REMOTE_ADDR} }
+    method remote_host { $!env->{REMOTE_HOST} }
+    method protocol    { $!env->{SERVER_PROTOCOL} }
+    method method      { $!env->{REQUEST_METHOD} }
+    method port        { $!env->{SERVER_PORT} }
+    method user        { $!env->{REMOTE_USER} }
+    method request_uri { $!env->{REQUEST_URI} }
+    method path_info   { $!env->{PATH_INFO} }
+    method path        { $!env->{PATH_INFO} || '/' }
+    method script_name { $!env->{SCRIPT_NAME} }
+    method scheme      { $!env->{'psgi.url_scheme'} }
     method secure      { $self->scheme eq 'https' }
-    method body        { $env->{'psgi.input'} }
-    method input       { $env->{'psgi.input'} }
+    method body        { $!env->{'psgi.input'} }
+    method input       { $!env->{'psgi.input'} }
 
-    method content_length   { $env->{CONTENT_LENGTH} }
-    method content_type     { $env->{CONTENT_TYPE} }
+    method content_length   { $!env->{CONTENT_LENGTH} }
+    method content_type     { $!env->{CONTENT_TYPE} }
 
-    method session         { $env->{'psgix.session'} }
-    method session_options { $env->{'psgix.session.options'} }
-    method logger          { $env->{'psgix.logger'} }
+    method session         { $!env->{'psgix.session'} }
+    method session_options { $!env->{'psgix.session.options'} }
+    method logger          { $!env->{'psgix.logger'} }
 
     method cookies {
 
-        return {} unless $env->{HTTP_COOKIE};
+        return {} unless $!env->{HTTP_COOKIE};
 
         # HTTP_COOKIE hasn't changed: reuse the parsed cookie
-        if (   $env->{'plack.cookie.parsed'}
-            && $env->{'plack.cookie.string'} eq $env->{HTTP_COOKIE}) {
-            return $env->{'plack.cookie.parsed'};
+        if (   $!env->{'plack.cookie.parsed'}
+            && $!env->{'plack.cookie.string'} eq $!env->{HTTP_COOKIE}) {
+            return $!env->{'plack.cookie.parsed'};
         }
 
-        $env->{'plack.cookie.string'} = $env->{HTTP_COOKIE};
+        $!env->{'plack.cookie.string'} = $!env->{HTTP_COOKIE};
 
         my %results;
-        my @pairs = grep m/=/, split "[;,] ?", $env->{'plack.cookie.string'};
+        my @pairs = grep m/=/, split "[;,] ?", $!env->{'plack.cookie.string'};
         for my $pair ( @pairs ) {
             # trim leading trailing whitespace
             $pair =~ s/^\s+//; $pair =~ s/\s+$//;
@@ -69,17 +69,17 @@ class Request {
             $results{$key} = $value unless exists $results{$key};
         }
 
-        $env->{'plack.cookie.parsed'} = \%results;
+        $!env->{'plack.cookie.parsed'} = \%results;
     }
 
     method query_parameters {
-        $env->{'plack.request.query'} ||= $self->_parse_query;
+        $!env->{'plack.request.query'} ||= $self->_parse_query;
     }
 
     method _parse_query {
 
         my @query;
-        my $query_string = $env->{QUERY_STRING};
+        my $query_string = $!env->{QUERY_STRING};
         if (defined $query_string) {
             if ($query_string =~ /=/) {
                 # Handle  ?foo=bar&bar=foo type of query
@@ -100,12 +100,12 @@ class Request {
 
     method content {
 
-        unless ($env->{'psgix.input.buffered'}) {
+        unless ($!env->{'psgix.input.buffered'}) {
             $self->_parse_request_body;
         }
 
         my $fh = $self->input           or return '';
-        my $cl = $env->{CONTENT_LENGTH} or return '';
+        my $cl = $!env->{CONTENT_LENGTH} or return '';
 
         $fh->seek(0, 0); # just in case middleware/apps read it without seeking back
         $fh->read(my($content), $cl, 0);
@@ -119,16 +119,16 @@ class Request {
     # XXX you can mutate headers with ->headers but it's not written through to the env
 
     method headers {
-        if (!defined $headers) {
-            $headers = HTTP::Headers->new(
+        if (!defined $!headers) {
+            $!headers = HTTP::Headers->new(
                 map {
                     (my $field = $_) =~ s/^HTTPS?_//;
-                    ( $field => $env->{$_} );
+                    ( $field => $!env->{$_} );
                 }
-                    grep { /^(?:HTTP|CONTENT)/i } keys %$env
+                    grep { /^(?:HTTP|CONTENT)/i } keys %{$!env}
                 );
         }
-        $headers;
+        $!headers;
     }
 
     method content_encoding { $self->headers->content_encoding(@_) }
@@ -138,16 +138,16 @@ class Request {
 
     method body_parameters {
 
-        unless ($env->{'plack.request.body'}) {
+        unless ($!env->{'plack.request.body'}) {
             $self->_parse_request_body;
         }
 
-        return $env->{'plack.request.body'};
+        return $!env->{'plack.request.body'};
     }
 
     # contains body + query
     method parameters {
-        $env->{'plack.request.merged'} ||= do {
+        $!env->{'plack.request.merged'} ||= do {
             my $query = $self->query_parameters;
             my $body  = $self->body_parameters;
             Hash::MultiValue->new($query->flatten, $body->flatten);
@@ -156,12 +156,12 @@ class Request {
 
     method uploads {
 
-        if ($env->{'plack.request.upload'}) {
-            return $env->{'plack.request.upload'};
+        if ($!env->{'plack.request.upload'}) {
+            return $!env->{'plack.request.upload'};
         }
 
         $self->_parse_request_body;
-        return $env->{'plack.request.upload'};
+        return $!env->{'plack.request.upload'};
     }
 
     method param ($key) {
@@ -208,10 +208,10 @@ class Request {
     }
 
     method _uri_base {
-        my $uri = ($env->{'psgi.url_scheme'} || "http") .
+        my $uri = ($!env->{'psgi.url_scheme'} || "http") .
             "://" .
-            ($env->{HTTP_HOST} || (($env->{SERVER_NAME} || "") . ":" . ($env->{SERVER_PORT} || 80))) .
-            ($env->{SCRIPT_NAME} || '/');
+            ($!env->{HTTP_HOST} || (($!env->{SERVER_NAME} || "") . ":" . ($!env->{SERVER_PORT} || 80))) .
+            ($!env->{SCRIPT_NAME} || '/');
         return $uri;
     }
 
@@ -222,12 +222,12 @@ class Request {
 
     method _parse_request_body {
 
-        my $ct = $env->{CONTENT_TYPE};
-        my $cl = $env->{CONTENT_LENGTH};
+        my $ct = $!env->{CONTENT_TYPE};
+        my $cl = $!env->{CONTENT_LENGTH};
         if (!$ct && !$cl) {
             # No Content-Type nor Content-Length -> GET/HEAD
-            $env->{'plack.request.body'}   = Hash::MultiValue->new;
-            $env->{'plack.request.upload'} = Hash::MultiValue->new;
+            $!env->{'plack.request.body'}   = Hash::MultiValue->new;
+            $!env->{'plack.request.upload'} = Hash::MultiValue->new;
             return;
         }
 
@@ -238,13 +238,13 @@ class Request {
         # HTTP::Body to do so. It will run the cleanup when the request
         # env is destroyed. That the object will not go out of scope by
         # the end of this method we will store a reference here.
-        $env->{'plack.request.http.body'} = $body;
+        $!env->{'plack.request.http.body'} = $body;
         $body->cleanup(1);
 
         my $input = $self->input;
 
         my $buffer;
-        if ($env->{'psgix.input.buffered'}) {
+        if ($!env->{'psgix.input.buffered'}) {
             # Just in case if input is read by middleware/apps beforehand
             $input->seek(0, 0);
         } else {
@@ -265,13 +265,13 @@ class Request {
         }
 
         if ($buffer) {
-            $env->{'psgix.input.buffered'} = 1;
-            $env->{'psgi.input'} = $buffer->rewind;
+            $!env->{'psgix.input.buffered'} = 1;
+            $!env->{'psgi.input'} = $buffer->rewind;
         } else {
             $input->seek(0, 0);
         }
 
-        $env->{'plack.request.body'}   = Hash::MultiValue->from_mixed($body->param);
+        $!env->{'plack.request.body'}   = Hash::MultiValue->from_mixed($body->param);
 
         my @uploads = Hash::MultiValue->from_mixed($body->upload)->flatten;
         my @obj;
@@ -279,7 +279,7 @@ class Request {
             push @obj, $k, $self->_make_upload($v);
         }
 
-        $env->{'plack.request.upload'} = Hash::MultiValue->new(@obj);
+        $!env->{'plack.request.upload'} = Hash::MultiValue->new(@obj);
 
         1;
     }

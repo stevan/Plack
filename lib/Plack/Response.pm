@@ -9,10 +9,10 @@ use HTTP::Headers ();
 use URI::Escape   ();
 
 class Response {
-    has $body    is rw;
-    has $status  is rw;
-    has $cookies is rw = {};    
-    has $headers;
+    has $!body    is rw;
+    has $!status  is rw;
+    has $!cookies is rw = {};
+    has $!headers;
 
     method code    { $self->status(@_) }
     method content { $self->body(@_)   }
@@ -31,14 +31,14 @@ class Response {
         if (defined $_headers) {
             if (ref $_headers eq 'ARRAY') {
                 Carp::carp("Odd number of headers") if @$_headers % 2 != 0;
-                $headers = HTTP::Headers->new(@$_headers);
+                $!headers = HTTP::Headers->new(@$_headers);
             } elsif (ref $_headers eq 'HASH') {
-                $headers = HTTP::Headers->new(%$_headers);
+                $!headers = HTTP::Headers->new(%$_headers);
             }
         } else {
-            $headers //= HTTP::Headers->new();
+            $!headers //= HTTP::Headers->new();
         }
-        return $headers;
+        return $!headers;
     }
 
     method header { $self->headers->header(@_) } # shortcut
@@ -53,7 +53,7 @@ class Response {
 
         if ($url) {
             $self->location($url);
-            $status = $_status // 302;
+            $!status = $_status // 302;
         }
 
         return $self->location;
@@ -66,7 +66,7 @@ class Response {
         $self->_finalize_cookies($_headers);
 
         return [
-            $status,
+            $!status,
             +[
                 map {
                     my $k = $_;
@@ -90,11 +90,11 @@ class Response {
 
 
     method _body {
-        $body = [] unless defined $body;
-        if (!ref $body or Scalar::Util::blessed($body) && overload::Method($body, q("")) && !$body->can('getline')) {
-            return [ $body ];
+        $!body = [] unless defined $!body;
+        if (!ref $!body or Scalar::Util::blessed($!body) && overload::Method($!body, q("")) && !$!body->can('getline')) {
+            return [ $!body ];
         } else {
-            return $body;
+            return $!body;
         }
     }
 

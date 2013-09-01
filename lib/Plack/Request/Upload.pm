@@ -6,26 +6,26 @@ use mop;
 use Carp ();
 
 class Upload {
-    has $headers  is ro;
-    has $tempname is ro;
-    has $size     is ro;
-    has $filename is ro;
-    has $basename;
+    has $!headers  is ro;
+    has $!tempname is ro;
+    has $!size     is ro;
+    has $!filename is ro;
+    has $!basename;
 
-    method path { $tempname }
+    method path { $!tempname }
 
-    method content_type { $headers->content_type(@_) }
+    method content_type { $!headers->content_type(@_) }
     method type         { $self->content_type(@_)    }
 
     method basename {
-        unless (defined $basename) {
+        unless (defined $!basename) {
             require File::Spec::Unix;
-            $basename = $filename;
-            $basename =~ s|\\|/|g;
-            $basename = ( File::Spec::Unix->splitpath($basename) )[2];
-            $basename =~ s|[^\w\.-]+|_|g;
+            $!basename = $!filename;
+            $!basename =~ s|\\|/|g;
+            $!basename = ( File::Spec::Unix->splitpath($!basename) )[2];
+            $!basename =~ s|[^\w\.-]+|_|g;
         }
-        $basename;
+        $!basename;
     }
 }
 
@@ -33,7 +33,7 @@ class Upload {
 # This has to be here because
 # otherwise this will pollute
 # the Plack::Request namespace
-# with a method 'method' that 
+# with a method 'method' that
 # takes precedence in the method
 # dispatch.
 # - SL

@@ -7,17 +7,17 @@ use Plack::Util;
 
 class Cascade extends Plack::Component is overload('inherited') {
 
-    has $apps  is rw = []; 
-    has $catch is rw; 
-    has $codes is rw;
+    has $!apps  is rw = [];
+    has $!catch is rw;
+    has $!codes is rw;
 
     method add {
-        push @$apps, @_;
+        push @{$!apps}, @_;
     }
 
     method prepare_app {
-        my %codes = map { $_ => 1 } @{ $catch || [ 404 ] };
-        $codes = \%codes;
+        my %codes = map { $_ => 1 } @{ $!catch || [ 404 ] };
+        $!codes = \%codes;
     }
 
     method call ($env) {
@@ -28,7 +28,7 @@ class Cascade extends Plack::Component is overload('inherited') {
             my $done;
             my $respond_wrapper = sub {
                 my $res = shift;
-                if ($codes->{$res->[0]}) {
+                if ($!codes->{$res->[0]}) {
                     # suppress output by giving the app an
                     # output spool which drops everything on the floor
                     return Plack::Util::inline_object
@@ -39,7 +39,7 @@ class Cascade extends Plack::Component is overload('inherited') {
                 }
             };
 
-            my @try = @{$apps || []};
+            my @try = @{$!apps || []};
             my $tries_left = 0 + @try;
 
             if (not $tries_left) {

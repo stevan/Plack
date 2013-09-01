@@ -23,8 +23,8 @@ if (try { require Devel::StackTrace::WithLexicals; Devel::StackTrace::WithLexica
 }
 
 class StackTrace extends Plack::Middleware is overload('inherited') {
-    has $force           is rw;
-    has $no_print_errors is rw;
+    has $!force           is rw;
+    has $!no_print_errors is rw;
 
     method call ($env) {
 
@@ -48,12 +48,12 @@ class StackTrace extends Plack::Middleware is overload('inherited') {
             ];
         };
 
-        if ($trace && ($caught || ($force && ref $res eq 'ARRAY' && $res->[0] == 500)) ) {
+        if ($trace && ($caught || ($!force && ref $res eq 'ARRAY' && $res->[0] == 500)) ) {
             my $text = $trace->as_string;
             my $html = $trace->as_html;
             $env->{'plack.stacktrace.text'} = $text;
             $env->{'plack.stacktrace.html'} = $html;
-            $env->{'psgi.errors'}->print($text) unless $no_print_errors;
+            $env->{'psgi.errors'}->print($text) unless $!no_print_errors;
             if (($env->{HTTP_ACCEPT} || '*/*') =~ /html/) {
                 $res = [500, ['Content-Type' => 'text/html; charset=utf-8'], [ $self->utf8_safe($html) ]];
             } else {

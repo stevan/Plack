@@ -8,11 +8,11 @@ use Carp ();
 
 class URLMap extends Plack::Component is overload('inherited') {
 
-    has $_mapping        = [];
-    has $_sorted_mapping = [];
+    has $!_mapping        = [];
+    has $!_sorted_mapping = [];
 
-    method mount ($location, $app) { 
-        $self->map( $location, $app ); 
+    method mount ($location, $app) {
+        $self->map( $location, $app );
     }
 
     method map ($location, $app) {
@@ -28,15 +28,15 @@ class URLMap extends Plack::Component is overload('inherited') {
         }
         $location =~ s!/$!!;
 
-        push @$_mapping, [ $host, $location, $app ];
+        push @{$!_mapping}, [ $host, $location, $app ];
     }
 
     method prepare_app {
         # sort by path length
-        $_sorted_mapping = [
+        $!_sorted_mapping = [
             map  { [ @{$_}[2..4] ] }
             sort { $b->[0] <=> $a->[0] || $b->[1] <=> $a->[1] }
-            map  { [ ($_->[0] ? length $_->[0] : 0), length($_->[1]), @$_ ] } @$_mapping,
+            map  { [ ($_->[0] ? length $_->[0] : 0), length($_->[1]), @$_ ] } @{$!_mapping},
         ];
     }
 
@@ -51,7 +51,7 @@ class URLMap extends Plack::Component is overload('inherited') {
             $http_host =~ s/:$port$//;
         }
 
-        for my $map ( @$_sorted_mapping ) {
+        for my $map ( @{$!_sorted_mapping} ) {
             my($host, $location, $app) = @$map;
             my $path = $path_info; # copy
             no warnings 'uninitialized';
@@ -170,7 +170,7 @@ C</wiki> by:
 
   # MyWikiApp looks at PATH_INFO and handles /index and /page/*
   my $wiki_app = sub { MyWikiApp->run(@_) };
-  
+
   use Plack::App::URLMap;
   my $app = Plack::App::URLMap->new;
   $app->mount("/wiki" => $wiki_app);

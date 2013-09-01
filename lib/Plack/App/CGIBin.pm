@@ -8,8 +8,8 @@ use Plack::App::WrapCGI;
 my %exec_cache;
 
 class CGIBin extends Plack::App::File is overload('inherited') {
-    has $exec_cb is rw;
-    has $_compiled = {};
+    has $!exec_cb is rw;
+    has $!_compiled = {};
 
     method allow_path_info { 1 }
 
@@ -17,9 +17,9 @@ class CGIBin extends Plack::App::File is overload('inherited') {
 
         return $exec_cache{$file} if exists $exec_cache{$file};
 
-        my $_exec_cb = $exec_cb || sub { $self->exec_cb_default(@_) };
+        my $exec_cb = $!exec_cb || sub { $self->exec_cb_default(@_) };
 
-        return $exec_cache{$file} = $_exec_cb->($file);
+        return $exec_cache{$file} = $exec_cb->($file);
     }
 
     method exec_cb_default ($file) {
@@ -44,7 +44,7 @@ class CGIBin extends Plack::App::File is overload('inherited') {
 
         local @{$env}{qw(SCRIPT_NAME PATH_INFO)} = @{$env}{qw( plack.file.SCRIPT_NAME plack.file.PATH_INFO )};
 
-        my $app = $_compiled->{$file} ||= Plack::App::WrapCGI->new(
+        my $app = $!_compiled->{$file} ||= Plack::App::WrapCGI->new(
             script => $file, execute => $self->would_exec($file),
         )->to_app;
         $app->($env);

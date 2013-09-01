@@ -4,17 +4,17 @@ use warnings;
 use mop;
 
 class LighttpdScriptNameFix extends Plack::Middleware is overload('inherited') {
-    has $script_name is rw = '';
+    has $!script_name is rw = '';
 
     method prepare_app {
-        $script_name =~ s!/$!!;
+        $!script_name =~ s!/$!!;
     }
 
     method call ($env) {
 
         if ($env->{SERVER_SOFTWARE} && $env->{SERVER_SOFTWARE} =~ /lighttpd/) {
             $env->{PATH_INFO}   = $env->{SCRIPT_NAME} . $env->{PATH_INFO};
-            $env->{SCRIPT_NAME} = $script_name;
+            $env->{SCRIPT_NAME} = $!script_name;
             $env->{PATH_INFO}  =~ s/^\Q$env->{SCRIPT_NAME}\E//;
         }
 
