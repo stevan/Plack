@@ -37,7 +37,7 @@ class PSGI {
     has $!host            = 0;
     has $!port            = 8080;
     has $!timeout         = 300;
-    has $!server_software = ${^META}->name;
+    has $!server_software = 'HTTP::Server::PSGI';
     has $!server_ready    = do { sub {} };
     has $!listen_sock;
     has $!ssl;

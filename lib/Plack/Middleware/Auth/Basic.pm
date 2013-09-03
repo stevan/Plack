@@ -1,4 +1,4 @@
-package Plack::Middleware;
+package Plack::Middleware::Auth;
 use v5.16;
 use warnings;
 use mop;
@@ -6,7 +6,7 @@ use mop;
 use Scalar::Util;
 use MIME::Base64;
 
-class Auth::Basic extends Plack::Middleware is overload('inherited') {
+class Basic extends Plack::Middleware is overload('inherited') {
     has $!realm         is rw;
     has $!authenticator is rw;
 
@@ -50,6 +50,7 @@ class Auth::Basic extends Plack::Middleware is overload('inherited') {
         ];
     }
 }
+
 1;
 
 __END__
