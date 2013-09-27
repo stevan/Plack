@@ -10,7 +10,7 @@ use Hash::MultiValue;
 class LWPish {
     has $!http;
 
-    method new {
+    method new ($class:) {
         $class->next::method(
             http => @_ == 1 ? $_[0] : HTTP::Tiny->new(@_)
         );

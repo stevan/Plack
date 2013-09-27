@@ -19,7 +19,7 @@ class Request {
 
     has $!headers;
 
-    method new ($e) {
+    method new ($class: $e) {
         $class->next::method( env => $e )
     }
 

@@ -15,7 +15,7 @@ class Loader {
         # do nothing. Override in subclass
     }
 
-    method auto (@args) {
+    method auto ($class: @args) {
 
         my $backend = $class->guess
             or Carp::croak("Couldn't auto-guess server server implementation. Set it with PLACK_SERVER");
@@ -54,7 +54,7 @@ class Loader {
         $!app = $builder->();
     }
 
-    method guess {
+    method guess ($class:) {
 
         my $env = $class->env;
 

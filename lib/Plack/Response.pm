@@ -17,7 +17,7 @@ class Response {
     method code    { $self->status(@_) }
     method content { $self->body(@_)   }
 
-    method new ($rc, $_headers, $content) {
+    method new ($class: $rc, $_headers, $content) {
         my $this = $class->next::method(
             status  => $rc,
             body    => $content

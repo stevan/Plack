@@ -9,7 +9,7 @@ use Plack::Util;
 
 class Lint extends Plack::Middleware is overload('inherited') {
 
-    method wrap ($app) {
+    method wrap ($class: $app) {
 
         unless (ref $app eq 'CODE' or overload::Method($app, '&{}')) {
             die("PSGI app should be a code reference: ", (defined $app ? $app : "undef"));

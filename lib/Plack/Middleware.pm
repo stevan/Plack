@@ -13,7 +13,7 @@ class Middleware extends Plack::Component is overload('inherited'), abstract {
         if (ref $self) {
             $!app = $app;
         } else {
-            $self = $class->new({ app => $app, @args });
+            $self = $self->new({ app => $app, @args });
         }
         return $self->to_app;
     }

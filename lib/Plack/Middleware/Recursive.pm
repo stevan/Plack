@@ -80,9 +80,9 @@ use mop;
 class ForwardRequest {
     has $!path is ro;
 
-    method new ($path) { $class->next::method(path => $path) }
+    method new ($class: $path) { $class->next::method(path => $path) }
 
-    method throw { die $class->new( @_ ) }
+    method throw ($class:) { die $class->new( @_ ) }
 
     method as_string is overload('""') {
         return "Forwarding to $!path : Your application should be wrapped with Plack::Middleware::Recursive.";

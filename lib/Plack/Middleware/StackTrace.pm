@@ -32,7 +32,7 @@ class StackTrace extends Plack::Middleware is overload('inherited') {
         local $SIG{__DIE__} = sub {
             $trace = $Plack::Middleware::StackTrace::StackTraceClass->new(
                 indent => 1, message => $self->munge_error($_[0], [ caller ]),
-                ignore_package => $class,
+                ignore_package => ref($self),
             );
             die @_;
         };
