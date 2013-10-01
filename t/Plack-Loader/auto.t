@@ -14,7 +14,7 @@ $INC{"Plack/Handler/Twiggy.pm"} = __FILE__;
 sub Plack::Handler::Twiggy::new { bless {}, shift }
 
 no warnings 'redefine';
-mop::get_meta('Plack::Loader')->add_method(
+mop::meta('Plack::Loader')->add_method(
     mop::method->new(
         name => 'env',
         body => sub { return {} }
