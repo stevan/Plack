@@ -23,7 +23,7 @@ class Static extends Plack::Middleware is overload('inherited') {
         return $self->app->($env);
     }
 
-    submethod _handle_static ($env) {
+    method _handle_static ($env) {
 
         my $path_match = $!path or return;
         my $path = $env->{PATH_INFO};

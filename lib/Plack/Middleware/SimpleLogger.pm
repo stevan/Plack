@@ -31,7 +31,7 @@ class SimpleLogger extends Plack::Middleware is overload('inherited') {
         $self->app->($env);
     }
 
-    submethod format_time {
+    method format_time {
         my $old_locale = POSIX::setlocale(&POSIX::LC_ALL);
         POSIX::setlocale(&POSIX::LC_ALL, 'C');
         my $out = POSIX::strftime(@_);

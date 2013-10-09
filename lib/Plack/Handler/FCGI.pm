@@ -30,7 +30,7 @@ class FCGI extends Plack::Handler {
     has $!stdout;
     has $!stderr;
 
-    submethod BUILD ($args) {
+    method BUILD ($args) {
         $!daemonize = $args->{'detach'} if exists $args->{'detach'};
         $!nproc     = 1 unless blessed $!manager;
         $!pid       = $args->{'pidfile'} if exists $args->{'pidfile'};

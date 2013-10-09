@@ -13,7 +13,7 @@ class ErrorDocument extends Plack::Middleware is overload('inherited') {
     has $!subrequest is rw;
     has $!status     is rw = {};
 
-    submethod BUILD ($args) {
+    method BUILD ($args) {
         $!status->{'500'} = $args->{'500'} if exists $args->{'500'};
         $!status->{'404'} = $args->{'404'} if exists $args->{'404'};
     }

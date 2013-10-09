@@ -44,7 +44,7 @@ class ConditionalGET extends Plack::Middleware is overload('inherited') {
         $h->exists('Last-Modified') && $h->get('Last-Modified') eq $self->_value($env->{HTTP_IF_MODIFIED_SINCE});
     }
 
-    submethod _value ($str) {
+    method _value ($str) {
         # IE sends wrong formatted value(i.e. "Thu, 03 Dec 2009 01:46:32 GMT; length=17936")
         $str =~ s/;.*$//;
         return $str;

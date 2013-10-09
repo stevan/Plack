@@ -69,7 +69,7 @@ class StackTrace extends Plack::Middleware is overload('inherited') {
         return $res;
     }
 
-    submethod no_trace_error ($msg) {
+    method no_trace_error ($msg) {
         chomp($msg);
 
         return <<EOF;
@@ -81,7 +81,7 @@ and the StackTrace middleware couldn't catch its stack trace, possibly because y
 EOF
     }
 
-    submethod munge_error ($err, $caller) {
+    method munge_error ($err, $caller) {
         return $err if ref $err;
 
         # Ugly hack to remove " at ... line ..." automatically appended by perl

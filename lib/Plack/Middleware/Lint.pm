@@ -87,7 +87,7 @@ class Lint extends Plack::Middleware is overload('inherited') {
         }
     }
 
-    submethod is_possibly_fh ($fh) {
+    method is_possibly_fh ($fh) {
         ref $fh eq 'GLOB' &&
         *{$fh}{IO} &&
         *{$fh}{IO}->can('getline');
@@ -157,7 +157,7 @@ class Lint extends Plack::Middleware is overload('inherited') {
     # NOTE: Some modules like HTML:: or XML:: could possibly generate
     # ASCII/Latin-1 strings with utf8 flags on. They're actually safe to
     # print, so there's no need to give warnings about it.
-    submethod _has_wide_char ($str) {
+    method _has_wide_char ($str) {
         utf8::is_utf8($str) && $str =~ /[^\x00-\xff]/;
     }
 }
