@@ -7,7 +7,7 @@ use Carp;
 use Plack::Util;
 use Scalar::Util qw(weaken);
 
-class BufferedStreaming extends Plack::Middleware is overload('inherited') {
+class BufferedStreaming extends Plack::Middleware {
     has $!force is rw;
 
     method call ($env) {

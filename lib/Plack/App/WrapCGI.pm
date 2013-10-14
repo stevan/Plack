@@ -9,7 +9,7 @@ use CGI::Compile;
 use Carp;
 use POSIX ":sys_wait_h";
 
-class WrapCGI extends Plack::Component is overload('inherited') {
+class WrapCGI extends Plack::Component {
     has $!script  is rw;
     has $!execute is rw;
     has $!_app    is rw;

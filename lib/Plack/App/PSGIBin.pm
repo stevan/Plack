@@ -5,7 +5,7 @@ use mop;
 
 use Plack::Util;
 
-class PSGIBin extends Plack::App::File is overload('inherited') {
+class PSGIBin extends Plack::App::File {
 
     has $!_compiled = {};
 

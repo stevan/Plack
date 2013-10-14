@@ -5,7 +5,7 @@ use mop;
 
 use HTTP::Headers;
 
-class RearrangeHeaders extends Plack::Middleware is overload('inherited') {
+class RearrangeHeaders extends Plack::Middleware {
 
     method call ($env) {
 

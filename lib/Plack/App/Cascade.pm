@@ -5,7 +5,7 @@ use mop;
 
 use Plack::Util;
 
-class Cascade extends Plack::Component is overload('inherited') {
+class Cascade extends Plack::Component {
 
     has $!apps  is rw = [];
     has $!catch is rw;

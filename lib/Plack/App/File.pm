@@ -9,7 +9,7 @@ use Plack::Util;
 use Plack::MIME;
 use HTTP::Date;
 
-class File extends Plack::Component is overload('inherited') {
+class File extends Plack::Component {
 
     has $!root         is rw;
     has $!file         is rw;

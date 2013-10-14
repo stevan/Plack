@@ -3,7 +3,7 @@ use v5.16;
 use warnings;
 use mop;
 
-class LighttpdScriptNameFix extends Plack::Middleware is overload('inherited') {
+class LighttpdScriptNameFix extends Plack::Middleware {
     has $!script_name is rw = '';
 
     method prepare_app {

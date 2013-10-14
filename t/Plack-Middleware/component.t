@@ -8,7 +8,7 @@ use HTTP::Request::Common;
 use Test::More;
 use Plack::Test;
 
-class MyComponent extends Plack::Component is overload('inherited') {
+class MyComponent extends Plack::Component {
     has $!res is rw;
     has $!cb  is rw;
 

@@ -6,7 +6,7 @@ use mop;
 use Plack::Util;
 use Scalar::Util;
 
-class XSendfile extends Plack::Middleware is overload('inherited') {
+class XSendfile extends Plack::Middleware {
     has $!variation is rw;
 
     method call ($env) {

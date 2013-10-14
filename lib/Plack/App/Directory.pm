@@ -39,7 +39,7 @@ table { width:100%%; }
 </body></html>
 PAGE
 
-class Directory extends Plack::App::File is overload('inherited') {
+class Directory extends Plack::App::File {
 
     method should_handle ($file) {
         return -d $file || -f $file;

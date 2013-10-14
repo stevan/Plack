@@ -3,7 +3,7 @@ use v5.16;
 use warnings;
 use mop;
 
-class NullLogger extends Plack::Middleware is overload('inherited') {
+class NullLogger extends Plack::Middleware {
 
     method call ($env) {
         $env->{'psgix.logger'} = sub { };

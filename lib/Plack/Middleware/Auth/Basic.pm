@@ -6,7 +6,7 @@ use mop;
 use Scalar::Util;
 use MIME::Base64;
 
-class Basic extends Plack::Middleware is overload('inherited') {
+class Basic extends Plack::Middleware {
     has $!realm         is rw;
     has $!authenticator is rw;
 

@@ -6,7 +6,7 @@ use mop;
 use Carp ();
 use Plack::Util;
 
-class Middleware extends Plack::Component is overload('inherited'), abstract {
+class Middleware extends Plack::Component is abstract {
     has $!app is rw;
 
     method wrap ($app, @args) {

@@ -5,7 +5,7 @@ use mop;
 
 use Plack::Util;
 
-class XFramework extends Plack::Middleware is overload('inherited') {
+class XFramework extends Plack::Middleware {
     has $!framework is rw;
 
     method call ($env) {

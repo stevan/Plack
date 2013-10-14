@@ -7,7 +7,7 @@ use Carp ();
 use Scalar::Util qw(blessed);
 use Plack::Util;
 
-class Lint extends Plack::Middleware is overload('inherited') {
+class Lint extends Plack::Middleware {
 
     method wrap ($class: $app) {
 

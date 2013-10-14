@@ -10,7 +10,7 @@ use Scalar::Util ();
 my $i = 0;
 my %level_numbers = map { $_ => $i++ } qw(debug info warn error fatal);
 
-class SimpleLogger extends Plack::Middleware is overload('inherited') {
+class SimpleLogger extends Plack::Middleware {
     has $!level is rw;
 
     method call ($env) {

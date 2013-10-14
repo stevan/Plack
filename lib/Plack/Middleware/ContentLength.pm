@@ -5,7 +5,7 @@ use mop;
 
 use Plack::Util;
 
-class ContentLength extends Plack::Middleware is overload('inherited') {
+class ContentLength extends Plack::Middleware {
 
     method call ($env) {
         my $res  = $self->app->($env);

@@ -6,7 +6,7 @@ use mop;
 use constant DEBUG => $ENV{PLACK_URLMAP_DEBUG};
 use Carp ();
 
-class URLMap extends Plack::Component is overload('inherited') {
+class URLMap extends Plack::Component {
 
     has $!_mapping        = [];
     has $!_sorted_mapping = [];

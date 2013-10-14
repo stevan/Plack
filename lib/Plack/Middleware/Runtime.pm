@@ -6,7 +6,7 @@ use mop;
 use Plack::Util;
 use Time::HiRes;
 
-class Runtime extends Plack::Middleware is overload('inherited') {
+class Runtime extends Plack::Middleware {
     has $!header_name is rw = 'X-Runtime';
 
     method call ($env) {

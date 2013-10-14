@@ -5,7 +5,7 @@ use mop;
 
 use Carp ();
 
-class LogDispatch extends Plack::Middleware is overload('inherited') {
+class LogDispatch extends Plack::Middleware {
     has $!logger is rw;
 
     method prepare_app {

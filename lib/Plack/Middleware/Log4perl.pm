@@ -5,7 +5,7 @@ use mop;
 
 use Carp ();
 
-class Log4perl extends Plack::Middleware is overload('inherited') {
+class Log4perl extends Plack::Middleware {
     has $!category is rw;
     has $!logger   is rw;
     has $!conf     is rw;

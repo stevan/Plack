@@ -5,7 +5,7 @@ use mop;
 
 use Plack::Util;
 
-class SimpleContentFilter extends Plack::Middleware is overload('inherited') {
+class SimpleContentFilter extends Plack::Middleware {
     has $!filter is rw;
 
     method call ($env) {

@@ -3,7 +3,7 @@ use v5.16;
 use warnings;
 use mop;
 
-class Head extends Plack::Middleware is overload('inherited') {
+class Head extends Plack::Middleware {
 
     method call ($env) {
 

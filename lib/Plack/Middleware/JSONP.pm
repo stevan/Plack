@@ -6,7 +6,7 @@ use mop;
 use Plack::Util;
 use URI::Escape ();
 
-class JSONP extends Plack::Middleware is overload('inherited') {
+class JSONP extends Plack::Middleware {
     has $!callback_key is rw;
 
     method prepare_app {

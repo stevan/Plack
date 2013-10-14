@@ -5,7 +5,7 @@ use mop;
 
 use Plack::App::File;
 
-class Static extends Plack::Middleware is overload('inherited') {
+class Static extends Plack::Middleware {
     has $!path        is rw;
     has $!root         is rw;
     has $!encoding     is rw;

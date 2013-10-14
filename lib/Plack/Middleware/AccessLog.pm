@@ -10,7 +10,7 @@ my %formats = (
     combined => '%h %l %u %t "%r" %>s %b "%{Referer}i" "%{User-agent}i"',
 );
 
-class AccessLog extends Plack::Middleware is overload('inherited') {
+class AccessLog extends Plack::Middleware {
     has $!logger         is rw;
     has $!format         is rw;
     has $!compiled_format is rw;

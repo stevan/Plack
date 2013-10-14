@@ -6,7 +6,7 @@ use mop;
 use Time::HiRes;
 use Plack::Util;
 
-class Timed extends Plack::Middleware::AccessLog is overload('inherited') {
+class Timed extends Plack::Middleware::AccessLog {
 
     method call ($env) {
 
@@ -25,7 +25,7 @@ class Timed extends Plack::Middleware::AccessLog is overload('inherited') {
 
                 return sub {
                     my $line = shift;
-                    
+
                     $length += length $line if defined $line;
 
                     unless( defined $line ) {

@@ -5,7 +5,7 @@ use mop;
 
 use Module::Refresh;
 
-class Refresh extends Plack::Middleware is overload('inherited') {
+class Refresh extends Plack::Middleware {
     has $!last     is rw;
     has $!cooldown is rw;
 

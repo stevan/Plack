@@ -3,7 +3,7 @@ use v5.16;
 use warnings;
 use mop;
 
-class Conditional extends Plack::Middleware is overload('inherited') {
+class Conditional extends Plack::Middleware {
     has $!condition  is rw;
     has $!middleware is rw;
     has $!builder    is rw;

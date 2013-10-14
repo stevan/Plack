@@ -8,7 +8,7 @@ use Try::Tiny;
 use Scalar::Util 'blessed';
 use HTTP::Status ();
 
-class HTTPExceptions extends Plack::Middleware is overload('inherited') {
+class HTTPExceptions extends Plack::Middleware {
     has $!rethrow is rw;
 
     method prepare_app {

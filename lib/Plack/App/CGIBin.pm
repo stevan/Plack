@@ -7,7 +7,7 @@ use Plack::App::WrapCGI;
 
 my %exec_cache;
 
-class CGIBin extends Plack::App::File is overload('inherited') {
+class CGIBin extends Plack::App::File {
     has $!exec_cb is rw;
     has $!_compiled = {};
 

@@ -8,7 +8,7 @@ use Plack::Util;
 
 use HTTP::Status qw(is_error);
 
-class ErrorDocument extends Plack::Middleware is overload('inherited') {
+class ErrorDocument extends Plack::Middleware {
 
     has $!subrequest is rw;
     has $!status     is rw = {};

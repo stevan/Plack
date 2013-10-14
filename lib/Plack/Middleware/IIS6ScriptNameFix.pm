@@ -3,7 +3,7 @@ use v5.16;
 use warnings;
 use mop;
 
-class IIS6ScriptNameFix extends Plack::Middleware is overload('inherited') {
+class IIS6ScriptNameFix extends Plack::Middleware {
 
     method call ($env) {
 

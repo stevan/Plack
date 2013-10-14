@@ -5,10 +5,10 @@ use mop;
 
 use Plack::Util;
 
-class IIS7KeepAliveFix extends Plack::Middleware is overload('inherited') {
+class IIS7KeepAliveFix extends Plack::Middleware {
 
     method call ($env) {
-        
+
         # Fixes buffer being cut off on redirect when keep-alive is active
         my $res  = $self->app->($env);
 

@@ -22,7 +22,7 @@ if (try { require Devel::StackTrace::WithLexicals; Devel::StackTrace::WithLexica
     $Plack::Middleware::StackTrace::StackTraceClass = "Devel::StackTrace::WithLexicals";
 }
 
-class StackTrace extends Plack::Middleware is overload('inherited') {
+class StackTrace extends Plack::Middleware {
     has $!force           is rw;
     has $!no_print_errors is rw;
 

@@ -8,7 +8,7 @@ use Scalar::Util qw(blessed);
 
 open my $null_io, "<", \"";
 
-class Recursive extends Plack::Middleware is overload('inherited') {
+class Recursive extends Plack::Middleware {
 
     method call ($env) {
 

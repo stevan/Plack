@@ -9,7 +9,7 @@ use HTTP::Request::Common;
 $Plack::Test::Impl = "Server";
 local $ENV{PLACK_SERVER} = "HTTP::Server::PSGI";
 
-class MyComponent extends Plack::Component is overload('inherited') {
+class MyComponent extends Plack::Component {
 
     has $!res is weak_ref;
     has $!cb  is weak_ref;
